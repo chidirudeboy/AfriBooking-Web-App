@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Image from 'next/image';
 import { useAuth } from '@/contexts/AuthContext';
@@ -13,7 +13,7 @@ import { usePrice } from '@/lib/utils/price';
 import axios from 'axios';
 import { 
   MapPin, Bed, Bath, Users, ChevronLeft, ChevronRight, 
-  CheckCircle, Copy, ArrowLeft, Calendar, Shield, Building2
+  CheckCircle, Copy, ArrowLeft, Calendar, Shield, Building2, Play
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -28,6 +28,8 @@ export default function ApartmentDetailsPage() {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [reservationType, setReservationType] = useState<string>('normal');
   const [selectedBedrooms, setSelectedBedrooms] = useState<number | null>(null);
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
   const [showBedroomDropdown, setShowBedroomDropdown] = useState(false);
   const [reservationStatus, setReservationStatus] = useState<string | null>(null);
   const [reservationId, setReservationId] = useState<string | null>(null);
@@ -572,26 +574,66 @@ export default function ApartmentDetailsPage() {
     return [];
   }, [apartment?.amenities]);
 
-  // Get media items (images)
+  // Get media items (images and videos) - matching mobile app structure
   const mediaItems = useMemo(() => {
-    if (!apartment?.media?.images) return [];
-    return apartment.media.images.map((image: any) => {
-      if (typeof image === 'string') return image;
-      return image?.uri || image?.url || '';
-    }).filter(Boolean);
-  }, [apartment?.media?.images]);
+    const items: Array<{ type: 'image' | 'video'; uri: string }> = [];
+    
+    // Add images
+    if (apartment?.media?.images) {
+      apartment.media.images.forEach((image: any) => {
+        const imageUri = typeof image === 'string' ? image : (image?.uri || image?.url || '');
+        if (imageUri) {
+          items.push({ type: 'image', uri: imageUri });
+        }
+      });
+    }
+    
+    // Add videos - matching mobile app structure
+    if (apartment?.media?.videos) {
+      apartment.media.videos.forEach((video: any) => {
+        let videoUri = '';
+        if (typeof video === 'string') {
+          videoUri = video;
+        } else if (video && typeof video === 'object') {
+          videoUri = video.fullPath || video.url || video.uri || '';
+        }
+        if (videoUri) {
+          items.push({ type: 'video', uri: videoUri });
+        }
+      });
+    }
+    
+    // Also check for videos at root level (fallback)
+    if (apartment?.videos && Array.isArray(apartment.videos)) {
+      apartment.videos.forEach((video: any) => {
+        const videoUri = typeof video === 'string' ? video : (video?.fullPath || video?.url || video?.uri || '');
+        if (videoUri && !items.some(item => item.type === 'video' && item.uri === videoUri)) {
+          items.push({ type: 'video', uri: videoUri });
+        }
+      });
+    }
+    
+    return items;
+  }, [apartment?.media?.images, apartment?.media?.videos, apartment?.videos]);
 
   const handlePreviousImage = () => {
+    setIsVideoPlaying(false);
     setCurrentImageIndex((prev) => 
       prev === 0 ? mediaItems.length - 1 : prev - 1
     );
   };
 
   const handleNextImage = () => {
+    setIsVideoPlaying(false);
     setCurrentImageIndex((prev) => 
       prev === mediaItems.length - 1 ? 0 : prev + 1
     );
   };
+
+  // Pause video when switching media
+  useEffect(() => {
+    setIsVideoPlaying(false);
+  }, [currentImageIndex]);
 
   const handleCopyLink = async () => {
     if (apartment?.webLink) {
@@ -636,7 +678,7 @@ export default function ApartmentDetailsPage() {
     );
   }
 
-  const currentImage = mediaItems[currentImageIndex] || 'https://via.placeholder.com/800x600';
+  const currentMedia = mediaItems[currentImageIndex] || { type: 'image', uri: 'https://via.placeholder.com/800x600' };
 
   return (
     <div className="flex min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -653,50 +695,79 @@ export default function ApartmentDetailsPage() {
             Back
           </button>
 
-          {/* Image Carousel */}
+          {/* Media Carousel (Images and Videos) */}
           <div className="relative w-full h-64 sm:h-80 md:h-96 lg:h-[500px] rounded-lg overflow-hidden mb-4 sm:mb-6 bg-gray-200 dark:bg-gray-700">
             {mediaItems.length > 0 ? (
               <>
-                <Image
-                  src={currentImage}
-                  alt={apartment.apartmentName}
-                  fill
-                  className="object-cover"
-                  priority
-                />
-                    {mediaItems.length > 1 && (
-                      <>
-                        <button
-                          onClick={handlePreviousImage}
-                          className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 bg-white/80 dark:bg-gray-800/80 hover:bg-white dark:hover:bg-gray-800 rounded-full p-1.5 sm:p-2 shadow-lg"
-                        >
-                          <ChevronLeft size={20} className="sm:w-6 sm:h-6 text-gray-900 dark:text-white" />
-                        </button>
-                        <button
-                          onClick={handleNextImage}
-                          className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 bg-white/80 dark:bg-gray-800/80 hover:bg-white dark:hover:bg-gray-800 rounded-full p-1.5 sm:p-2 shadow-lg"
-                        >
-                          <ChevronRight size={20} className="sm:w-6 sm:h-6 text-gray-900 dark:text-white" />
-                        </button>
-                        <div className="absolute bottom-2 sm:bottom-4 left-1/2 -translate-x-1/2 flex space-x-1.5 sm:space-x-2">
-                          {mediaItems.map((_, index) => (
-                            <button
-                              key={index}
-                              onClick={() => setCurrentImageIndex(index)}
-                              className={`h-1.5 sm:h-2 rounded-full transition-all ${
-                                index === currentImageIndex
-                                  ? 'w-6 sm:w-8 bg-white'
-                                  : 'w-1.5 sm:w-2 bg-white/50'
-                              }`}
-                            />
-                          ))}
+                {currentMedia.type === 'video' ? (
+                  <div className="relative w-full h-full">
+                    <video
+                      ref={videoRef}
+                      src={currentMedia.uri}
+                      className="w-full h-full object-cover"
+                      controls={isVideoPlaying}
+                      autoPlay={isVideoPlaying}
+                      loop
+                      playsInline
+                      onPlay={() => setIsVideoPlaying(true)}
+                      onPause={() => setIsVideoPlaying(false)}
+                    />
+                    {!isVideoPlaying && (
+                      <button
+                        onClick={() => {
+                          setIsVideoPlaying(true);
+                          videoRef.current?.play();
+                        }}
+                        className="absolute inset-0 flex items-center justify-center bg-black/30 hover:bg-black/40 transition-colors z-20"
+                      >
+                        <div className="bg-white/90 dark:bg-gray-800/90 rounded-full p-4 sm:p-6 shadow-lg">
+                          <Play className="w-12 h-12 sm:w-16 sm:h-16 text-gray-900 dark:text-white fill-current" />
                         </div>
-                      </>
+                      </button>
                     )}
+                  </div>
+                ) : (
+                  <Image
+                    src={currentMedia.uri}
+                    alt={apartment.apartmentName}
+                    fill
+                    className="object-cover"
+                    priority
+                  />
+                )}
+                {mediaItems.length > 1 && (
+                  <>
+                    <button
+                      onClick={handlePreviousImage}
+                      className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 bg-white/80 dark:bg-gray-800/80 hover:bg-white dark:hover:bg-gray-800 rounded-full p-1.5 sm:p-2 shadow-lg z-10"
+                    >
+                      <ChevronLeft size={20} className="sm:w-6 sm:h-6 text-gray-900 dark:text-white" />
+                    </button>
+                    <button
+                      onClick={handleNextImage}
+                      className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 bg-white/80 dark:bg-gray-800/80 hover:bg-white dark:hover:bg-gray-800 rounded-full p-1.5 sm:p-2 shadow-lg z-10"
+                    >
+                      <ChevronRight size={20} className="sm:w-6 sm:h-6 text-gray-900 dark:text-white" />
+                    </button>
+                    <div className="absolute bottom-2 sm:bottom-4 left-1/2 -translate-x-1/2 flex space-x-1.5 sm:space-x-2 z-10">
+                      {mediaItems.map((_, index) => (
+                        <button
+                          key={index}
+                          onClick={() => setCurrentImageIndex(index)}
+                          className={`h-1.5 sm:h-2 rounded-full transition-all ${
+                            index === currentImageIndex
+                              ? 'w-6 sm:w-8 bg-white'
+                              : 'w-1.5 sm:w-2 bg-white/50'
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
               </>
             ) : (
               <div className="w-full h-full flex items-center justify-center bg-gray-200 dark:bg-gray-700">
-                <p className="text-gray-500 dark:text-gray-400">No images available</p>
+                <p className="text-gray-500 dark:text-gray-400">No media available</p>
               </div>
             )}
           </div>
@@ -704,7 +775,7 @@ export default function ApartmentDetailsPage() {
           {/* Thumbnail Gallery */}
           {mediaItems.length > 1 && (
             <div className="flex space-x-2 mb-4 sm:mb-6 overflow-x-auto pb-2 -mx-3 sm:mx-0 px-3 sm:px-0">
-              {mediaItems.map((image, index) => (
+              {mediaItems.map((mediaItem, index) => (
                 <button
                   key={index}
                   onClick={() => setCurrentImageIndex(index)}
@@ -714,12 +785,32 @@ export default function ApartmentDetailsPage() {
                       : 'border-transparent'
                   }`}
                 >
-                  <Image
-                    src={image}
-                    alt={`Thumbnail ${index + 1}`}
-                    fill
-                    className="object-cover"
-                  />
+                  {mediaItem.type === 'video' ? (
+                    <>
+                      <video
+                        src={mediaItem.uri}
+                        className="w-full h-full object-cover"
+                        muted
+                        playsInline
+                      />
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                        <svg
+                          className="w-6 h-6 sm:w-8 sm:h-8 text-white"
+                          fill="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path d="M8 5v14l11-7z" />
+                        </svg>
+                      </div>
+                    </>
+                  ) : (
+                    <Image
+                      src={mediaItem.uri}
+                      alt={`Thumbnail ${index + 1}`}
+                      fill
+                      className="object-cover"
+                    />
+                  )}
                 </button>
               ))}
             </div>

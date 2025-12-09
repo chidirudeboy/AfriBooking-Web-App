@@ -4,6 +4,7 @@ import './globals.css'
 import { AuthProvider } from '@/contexts/AuthContext'
 import { SidebarProvider } from '@/contexts/SidebarContext'
 import { ThemeWrapper } from '@/components/ThemeWrapper'
+import SessionWarning from '@/components/SessionWarning'
 import { Toaster } from 'react-hot-toast'
 
 const inter = Inter({ subsets: ['latin'] })
@@ -25,6 +26,7 @@ export default function RootLayout({
           <AuthProvider>
             <SidebarProvider>
               {children}
+              <SessionWarning />
               <Toaster 
                 position="top-right"
                 toastOptions={{

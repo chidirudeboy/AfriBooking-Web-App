@@ -96,7 +96,32 @@ export default function ApartmentsPage() {
       }
     } catch (error: any) {
       console.error('Error fetching apartments:', error);
-      const errorMessage = error.response?.data?.message || error.message || 'Failed to load apartments';
+      
+      let errorMessage = 'Failed to load apartments';
+      
+      // Handle different error types
+      if (error.code === 'ECONNREFUSED' || error.message?.includes('Network Error')) {
+        errorMessage = 'Cannot connect to API server. Please ensure the backend server is running on http://localhost:8080';
+      } else if (error.code === 'ERR_NETWORK' || error.message?.includes('Network Error')) {
+        errorMessage = 'Network error. Please check your internet connection and ensure the API server is accessible.';
+      } else if (error.response?.status === 0 || error.message?.includes('CORS')) {
+        errorMessage = 'CORS error: The API server is not allowing requests from this origin. Please check CORS settings on the backend.';
+      } else if (error.response?.status === 404) {
+        errorMessage = 'API endpoint not found. Please check the API URL configuration.';
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      console.error('Full error details:', {
+        message: error.message,
+        code: error.code,
+        status: error.response?.status,
+        data: error.response?.data,
+        config: error.config?.url
+      });
+      
       toast.error(errorMessage);
     } finally {
       setLoading(false);
