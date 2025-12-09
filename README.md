@@ -8,6 +8,7 @@ A Next.js web application for AfriBooking - Find and Book apartments.
 - 🏠 Apartment listings with search and filters
 - 📱 Responsive design with sidebar navigation
 - 🎨 Modern UI with Tailwind CSS
+- 💬 Real-time chat/messaging system
 - 🔄 Shared utilities with mobile app
 
 ## Getting Started
@@ -51,6 +52,8 @@ web-app/
 │   ├── login/             # Login page
 │   ├── signup/            # Signup page
 │   ├── apartments/        # Apartment listings
+│   ├── messages/          # Chat/messaging pages
+│   ├── bookings/          # Booking pages
 │   └── layout.tsx         # Root layout
 ├── components/            # React components
 │   ├── Sidebar.tsx       # Sidebar navigation
@@ -83,19 +86,15 @@ web-app/
 
 ✅ User authentication (login, signup, logout)
 ✅ Apartment listing page with search
+✅ Apartment detail pages
 ✅ Reservation type filters (Normal Stay, Party, Movie Shoot, Photo Shoot)
+✅ Booking functionality
+✅ Booking history and details
 ✅ Responsive sidebar navigation
 ✅ Protected routes with authentication guards
+✅ Notifications system
+✅ **Real-time chat/messaging system**
 ✅ Shared utilities and types with mobile app
-
-## Next Steps
-
-- [ ] Apartment detail page
-- [ ] Booking functionality
-- [ ] User profile page
-- [ ] Notifications
-- [ ] Messages/Chat
-- [ ] Payment integration
 
 ## Tech Stack
 
@@ -106,4 +105,3 @@ web-app/
 - **HTTP Client**: Axios
 - **Notifications**: react-hot-toast
 - **Icons**: lucide-react
-
