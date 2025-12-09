@@ -31,7 +31,6 @@ This guide will help you deploy the AfriBooking Web App to Vercel.
    Click "Environment Variables" and add the following:
 
    ```
-   NEXT_PUBLIC_ENV=production
    NEXT_PUBLIC_BASE_URL=https://api.africartz.com/api
    NEXT_PUBLIC_PAYSTACK_KEY=pk_live_21c1bcc0b03668eddc2502a9b5ded80c5dae5587
    NEXT_PUBLIC_API_TIMEOUT=15000
@@ -39,7 +38,11 @@ This guide will help you deploy the AfriBooking Web App to Vercel.
    NEXT_PUBLIC_DEBUG_MODE=false
    ```
 
-   **Note**: For production, use your live Paystack key. For testing, you can use the test key.
+   **Important Notes:**
+   - `NEXT_PUBLIC_ENV=production` is **optional** - the app will auto-detect production on Vercel
+   - `NEXT_PUBLIC_BASE_URL` is **required** - this is the production API URL
+   - For production, use your live Paystack key. For testing, you can use the test key.
+   - **Make sure to select "Production" environment** when adding variables (or "All" to apply to all environments)
 
 5. **Deploy**
    - Click "Deploy"
