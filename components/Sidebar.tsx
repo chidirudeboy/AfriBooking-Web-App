@@ -75,7 +75,7 @@ export default function Sidebar() {
           fixed top-0 left-0 h-full bg-white dark:bg-gray-900 shadow-lg dark:shadow-gray-950 z-40 transform transition-all duration-300 ease-in-out
           ${isOpen ? 'translate-x-0' : '-translate-x-full'}
           lg:translate-x-0
-          ${mounted && isCollapsed ? 'w-20' : 'w-64'}
+          w-64 ${mounted ? (isCollapsed ? 'lg:w-20' : 'lg:w-64') : 'lg:w-64'}
         `}
         suppressHydrationWarning
       >
