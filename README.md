@@ -105,3 +105,16 @@ web-app/
 - **HTTP Client**: Axios
 - **Notifications**: react-hot-toast
 - **Icons**: lucide-react
+
+## Deployment
+
+This app is configured for deployment on Vercel. See [VERCEL_DEPLOY.md](./VERCEL_DEPLOY.md) for detailed deployment instructions.
+
+### Quick Deploy to Vercel
+
+1. Push your code to GitHub
+2. Import the repository in [Vercel](https://vercel.com/new)
+3. Add environment variables (see `.env.example`)
+4. Deploy!
+
+The app will automatically deploy on every push to the main branch.

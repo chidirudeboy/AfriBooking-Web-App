@@ -229,7 +229,7 @@ export default function FilterModal({ isOpen, onClose, onApply, onReset, current
                           : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600'
                       }`}
                     >
-                      {sort.label} {filters.sortBy === sort.key && sort.key !== 'price' && sort.key !== 'price-asc' 
+                      {sort.label} {sort.key !== 'price' && sort.key !== 'price-asc' && filters.sortBy === sort.key
                         ? (filters.sortOrder === 'asc' ? '↑' : '↓') 
                         : ''}
                     </button>
