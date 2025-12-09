@@ -15,6 +15,7 @@ import {
   MapPin, Bed, Bath, Users, ChevronLeft, ChevronRight, 
   CheckCircle, Copy, ArrowLeft, Calendar, Shield, Building2, Play
 } from 'lucide-react';
+import MediaModal from '@/components/MediaModal';
 import toast from 'react-hot-toast';
 
 export default function ApartmentDetailsPage() {
@@ -29,6 +30,7 @@ export default function ApartmentDetailsPage() {
   const [reservationType, setReservationType] = useState<string>('normal');
   const [selectedBedrooms, setSelectedBedrooms] = useState<number | null>(null);
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
+  const [isMediaModalOpen, setIsMediaModalOpen] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [showBedroomDropdown, setShowBedroomDropdown] = useState(false);
   const [reservationStatus, setReservationStatus] = useState<string | null>(null);
@@ -699,66 +701,82 @@ export default function ApartmentDetailsPage() {
           <div className="relative w-full h-64 sm:h-80 md:h-96 lg:h-[500px] rounded-lg overflow-hidden mb-4 sm:mb-6 bg-gray-200 dark:bg-gray-700">
             {mediaItems.length > 0 ? (
               <>
-                {currentMedia.type === 'video' ? (
-                  <div className="relative w-full h-full">
-                    <video
-                      ref={videoRef}
-                      src={currentMedia.uri}
-                      className="w-full h-full object-cover"
-                      controls={isVideoPlaying}
-                      autoPlay={isVideoPlaying}
-                      loop
-                      playsInline
-                      onPlay={() => setIsVideoPlaying(true)}
-                      onPause={() => setIsVideoPlaying(false)}
-                    />
-                    {!isVideoPlaying && (
-                      <button
-                        onClick={() => {
-                          setIsVideoPlaying(true);
-                          videoRef.current?.play();
+                <button
+                  onClick={() => setIsMediaModalOpen(true)}
+                  className="absolute inset-0 w-full h-full z-0 focus:outline-none"
+                  aria-label="Open media in fullscreen"
+                >
+                  {currentMedia.type === 'video' ? (
+                    <div className="relative w-full h-full">
+                      <video
+                        ref={videoRef}
+                        src={currentMedia.uri}
+                        className="w-full h-full object-cover pointer-events-none"
+                        controls={isVideoPlaying}
+                        autoPlay={isVideoPlaying}
+                        loop
+                        playsInline
+                        onPlay={() => setIsVideoPlaying(true)}
+                        onPause={() => setIsVideoPlaying(false)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setIsMediaModalOpen(true);
                         }}
-                        className="absolute inset-0 flex items-center justify-center bg-black/30 hover:bg-black/40 transition-colors z-20"
-                      >
-                        <div className="bg-white/90 dark:bg-gray-800/90 rounded-full p-4 sm:p-6 shadow-lg">
-                          <Play className="w-12 h-12 sm:w-16 sm:h-16 text-gray-900 dark:text-white fill-current" />
+                      />
+                      {!isVideoPlaying && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/30 pointer-events-none">
+                          <div className="bg-white/90 dark:bg-gray-800/90 rounded-full p-4 sm:p-6 shadow-lg">
+                            <Play className="w-12 h-12 sm:w-16 sm:h-16 text-gray-900 dark:text-white fill-current" />
+                          </div>
                         </div>
-                      </button>
-                    )}
-                  </div>
-                ) : (
-                  <Image
-                    src={currentMedia.uri}
-                    alt={apartment.apartmentName}
-                    fill
-                    className="object-cover"
-                    priority
-                  />
-                )}
+                      )}
+                    </div>
+                  ) : (
+                    <Image
+                      src={currentMedia.uri}
+                      alt={apartment.apartmentName}
+                      fill
+                      className="object-cover cursor-pointer"
+                      priority
+                    />
+                  )}
+                </button>
                 {mediaItems.length > 1 && (
                   <>
                     <button
-                      onClick={handlePreviousImage}
-                      className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 bg-white/80 dark:bg-gray-800/80 hover:bg-white dark:hover:bg-gray-800 rounded-full p-1.5 sm:p-2 shadow-lg z-10"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handlePreviousImage();
+                      }}
+                      className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 bg-white/80 dark:bg-gray-800/80 hover:bg-white dark:hover:bg-gray-800 rounded-full p-2.5 sm:p-2 shadow-lg z-20 min-w-[44px] min-h-[44px] flex items-center justify-center touch-manipulation"
+                      aria-label="Previous image"
                     >
                       <ChevronLeft size={20} className="sm:w-6 sm:h-6 text-gray-900 dark:text-white" />
                     </button>
                     <button
-                      onClick={handleNextImage}
-                      className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 bg-white/80 dark:bg-gray-800/80 hover:bg-white dark:hover:bg-gray-800 rounded-full p-1.5 sm:p-2 shadow-lg z-10"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleNextImage();
+                      }}
+                      className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 bg-white/80 dark:bg-gray-800/80 hover:bg-white dark:hover:bg-gray-800 rounded-full p-2.5 sm:p-2 shadow-lg z-20 min-w-[44px] min-h-[44px] flex items-center justify-center touch-manipulation"
+                      aria-label="Next image"
                     >
                       <ChevronRight size={20} className="sm:w-6 sm:h-6 text-gray-900 dark:text-white" />
                     </button>
-                    <div className="absolute bottom-2 sm:bottom-4 left-1/2 -translate-x-1/2 flex space-x-1.5 sm:space-x-2 z-10">
+                    <div className="absolute bottom-2 sm:bottom-4 left-1/2 -translate-x-1/2 flex space-x-1.5 sm:space-x-2 z-20">
                       {mediaItems.map((_, index) => (
                         <button
                           key={index}
-                          onClick={() => setCurrentImageIndex(index)}
-                          className={`h-1.5 sm:h-2 rounded-full transition-all ${
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setCurrentImageIndex(index);
+                          }}
+                          className={`h-2 sm:h-2.5 rounded-full transition-all touch-manipulation min-w-[24px] ${
                             index === currentImageIndex
-                              ? 'w-6 sm:w-8 bg-white'
-                              : 'w-1.5 sm:w-2 bg-white/50'
+                              ? 'w-8 sm:w-10 bg-white'
+                              : 'w-2 sm:w-2.5 bg-white/50'
                           }`}
+                          aria-label={`Go to image ${index + 1}`}
                         />
                       ))}
                     </div>
@@ -1140,6 +1158,14 @@ export default function ApartmentDetailsPage() {
           </div>
         </main>
       </div>
+
+      {/* Media Modal */}
+      <MediaModal
+        isOpen={isMediaModalOpen}
+        onClose={() => setIsMediaModalOpen(false)}
+        mediaItems={mediaItems}
+        initialIndex={currentImageIndex}
+      />
     </div>
   );
 }

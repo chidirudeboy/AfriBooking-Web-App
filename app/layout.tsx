@@ -36,9 +36,11 @@ export default function RootLayout({
               {children}
               <SessionWarning />
               <Toaster 
-                position="top-right"
+                position="top-center"
+                containerClassName="!top-16 sm:!top-4"
                 toastOptions={{
-                  className: 'dark:bg-gray-800 dark:text-white',
+                  className: 'dark:bg-gray-800 dark:text-white text-sm sm:text-base',
+                  duration: 4000,
                 }}
               />
             </SidebarProvider>
