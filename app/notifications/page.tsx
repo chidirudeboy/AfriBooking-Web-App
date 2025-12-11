@@ -273,12 +273,60 @@ export default function NotificationsPage() {
                 const data = parseNotificationData(notification.data);
 
                 // Determine if notification should be clickable (reservation accepted)
-                const isReservationAccepted = !expired && notificationType === 'airbnb_accept' && data?.apartment_id && data?.reservation_id;
-                const handleNotificationClick = () => {
-                  if (isReservationAccepted) {
-                    markAsRead(notification);
-                    // Route directly to booking page
-                    router.push(`/apartments/${data.apartment_id}/book?reservationId=${data.reservation_id}`);
+                // Check for both snake_case and camelCase field names
+                const apartmentId = data?.apartment_id || data?.apartmentId || data?.propertyId || data?.property_id;
+                const reservationId = data?.reservation_id || data?.reservationId;
+                
+                // Check if this is an accepted reservation notification
+                // Also check for variations of the notification type
+                const isAcceptType = notificationType === 'airbnb_accept' || 
+                                     notificationType === 'accept' ||
+                                     notificationType?.toLowerCase().includes('accept');
+                
+                const isReservationAccepted = !expired && 
+                  isAcceptType && 
+                  apartmentId && 
+                  reservationId;
+
+                // Debug logging (remove in production if needed)
+                if (isAcceptType && apartmentId && reservationId) {
+                  console.log('📬 Accepted reservation notification detected:', {
+                    notificationType,
+                    apartmentId,
+                    reservationId,
+                    expired,
+                    isReservationAccepted
+                  });
+                }
+
+                const handleNotificationClick = async (e?: React.MouseEvent) => {
+                  // Prevent navigation if clicking on action buttons
+                  if (e && (e.target as HTMLElement).closest('button')) {
+                    return;
+                  }
+
+                  if (isReservationAccepted && apartmentId && reservationId) {
+                    try {
+                      // Mark as read if not already read
+                      if (!isRead) {
+                        await markAsRead(notification);
+                      }
+                      // Route directly to booking page
+                      const bookingUrl = `/apartments/${apartmentId}/book?reservationId=${reservationId}`;
+                      console.log('🚀 Navigating to booking page:', bookingUrl);
+                      router.push(bookingUrl);
+                    } catch (error) {
+                      console.error('❌ Error navigating to booking page:', error);
+                      toast.error('Failed to navigate to booking page. Please try again.');
+                    }
+                  } else {
+                    console.log('⚠️ Notification not clickable:', {
+                      isReservationAccepted,
+                      apartmentId,
+                      reservationId,
+                      notificationType,
+                      expired
+                    });
                   }
                 };
 
@@ -287,8 +335,16 @@ export default function NotificationsPage() {
                     key={notificationId}
                     className={`bg-white dark:bg-gray-800 rounded-lg border-2 shadow-sm transition-all ${
                       !isRead ? 'border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20' : 'border-gray-200 dark:border-gray-700'
-                    } ${isReservationAccepted ? 'cursor-pointer hover:shadow-md' : ''}`}
+                    } ${isReservationAccepted ? 'cursor-pointer hover:shadow-md active:scale-[0.98]' : ''}`}
                     onClick={isReservationAccepted ? handleNotificationClick : undefined}
+                    role={isReservationAccepted ? 'button' : undefined}
+                    tabIndex={isReservationAccepted ? 0 : undefined}
+                    onKeyDown={isReservationAccepted ? (e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        handleNotificationClick();
+                      }
+                    } : undefined}
                   >
                     <div className="p-4 sm:p-6">
                       <div className="flex items-start justify-between gap-4">
@@ -349,7 +405,10 @@ export default function NotificationsPage() {
                       {isReservationAccepted && (
                         <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 flex gap-2" onClick={(e) => e.stopPropagation()}>
                           <button
-                            onClick={handleNotificationClick}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleNotificationClick();
+                            }}
                             className="flex-1 px-4 py-2 bg-gradient-to-r from-primary-light to-primary-dark text-white rounded-lg font-semibold hover:opacity-90 transition-opacity text-sm sm:text-base flex items-center justify-center gap-2"
                           >
                             <span>Book Now</span>
