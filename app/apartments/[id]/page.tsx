@@ -680,14 +680,16 @@ export default function ApartmentDetailsPage() {
     );
   }
 
-  const currentMedia = mediaItems[currentImageIndex] || { type: 'image', uri: 'https://via.placeholder.com/800x600' };
+  // Fallback image as data URI to avoid external network calls
+  const fallbackImage = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAwIiBoZWlnaHQ9IjYwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iODAwIiBoZWlnaHQ9IjYwMCIgZmlsbD0iI2YzZjRmNiIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMjQiIGZpbGw9IiM5Y2EzYWYiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5ObyBJbWFnZTwvdGV4dD48L3N2Zz4=';
+  const currentMedia = mediaItems[currentImageIndex] || { type: 'image', uri: fallbackImage };
 
   return (
-    <div className="flex min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="flex min-h-screen bg-gray-50 dark:bg-gray-900 overflow-x-hidden">
       <Sidebar />
       
-      <div className={`flex-1 transition-all duration-300 ${isCollapsed ? 'lg:ml-20' : 'lg:ml-64'}`}>
-        <main className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8 py-4 sm:py-6">
+      <div className={`flex-1 transition-all duration-300 ${isCollapsed ? 'lg:ml-20' : 'lg:ml-64'} w-0 min-w-0`}>
+        <main className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8 py-4 sm:py-6 w-full overflow-x-hidden">
           {/* Back Button */}
           <button
             onClick={() => router.back()}
@@ -834,9 +836,9 @@ export default function ApartmentDetailsPage() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 w-full">
             {/* Main Content */}
-            <div className="lg:col-span-2">
+            <div className="lg:col-span-2 w-full min-w-0">
               {/* Header */}
               <div className="mb-4 sm:mb-6">
                 <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-2">
@@ -884,7 +886,7 @@ export default function ApartmentDetailsPage() {
 
               {/* Bedroom Selection */}
               {(availableBedroomConfigs.length > 0 || apartment.bedrooms) && (
-                <div className="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 mb-4 sm:mb-6 shadow-sm border border-gray-200 dark:border-gray-700">
+                <div className="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 mb-4 sm:mb-6 shadow-sm border border-gray-200 dark:border-gray-700 w-full overflow-visible">
                   <div className="flex items-center mb-3 sm:mb-4">
                     <Bed size={18} className="sm:w-5 sm:h-5 mr-2 text-gray-600 dark:text-gray-400" />
                     <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
@@ -896,22 +898,22 @@ export default function ApartmentDetailsPage() {
                     Choose how many bedrooms you'd like to book:
                   </p>
 
-                  <div className="relative">
+                  <div className="relative w-full">
                     <button
                       onClick={() => setShowBedroomDropdown(!showBedroomDropdown)}
                       className="w-full flex items-center justify-between p-4 border-2 border-gray-300 dark:border-gray-600 rounded-lg hover:border-primary dark:hover:border-primary transition-colors bg-white dark:bg-gray-800"
                     >
-                      <div className="flex items-center flex-1">
-                        <Bed size={20} className="mr-3 text-gray-600 dark:text-gray-400" />
-                        <div className="text-left">
-                          <p className="font-semibold text-gray-900 dark:text-white">
+                      <div className="flex items-center flex-1 min-w-0">
+                        <Bed size={20} className="mr-3 text-gray-600 dark:text-gray-400 flex-shrink-0" />
+                        <div className="text-left min-w-0 flex-1">
+                          <p className="font-semibold text-gray-900 dark:text-white truncate">
                             {selectedBedrooms !== null
                               ? getBedroomOptions.find(opt => opt.bedrooms === selectedBedrooms)?.label.replace(' (Full Apartment)', '') || 
                                 `${selectedBedrooms} ${selectedBedrooms === 1 ? 'Bedroom' : 'Bedrooms'}`
                               : 'Select bedroom configuration'}
                           </p>
                           {selectedBedrooms !== null && (
-                            <p className="text-sm text-gray-600 dark:text-gray-400">
+                            <p className="text-sm text-gray-600 dark:text-gray-400 truncate">
                               ₦{numberWithCommas(price)} / night
                             </p>
                           )}
@@ -924,7 +926,7 @@ export default function ApartmentDetailsPage() {
                     </button>
 
                     {showBedroomDropdown && getBedroomOptions.length > 0 && (
-                      <div className="absolute z-10 w-full mt-2 bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-700 rounded-lg shadow-lg dark:shadow-gray-900 max-h-80 overflow-y-auto">
+                      <div className="absolute z-10 w-full mt-2 bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-700 rounded-lg shadow-lg dark:shadow-gray-900 max-h-80 overflow-y-auto left-0 right-0 max-w-full">
                         {getBedroomOptions.map((option, index) => {
                           const isSelected = selectedBedrooms === option.bedrooms;
                           return (
@@ -938,22 +940,22 @@ export default function ApartmentDetailsPage() {
                                 isSelected ? 'bg-primary/5 dark:bg-primary/10' : ''
                               }`}
                             >
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center flex-1">
-                                  <Building2 size={20} className="mr-3 text-gray-600 dark:text-gray-400" />
-                                  <div>
-                                    <p className="font-semibold text-gray-900 dark:text-white">
+                              <div className="flex items-center justify-between gap-2 min-w-0">
+                                <div className="flex items-center flex-1 min-w-0">
+                                  <Building2 size={20} className="mr-3 text-gray-600 dark:text-gray-400 flex-shrink-0" />
+                                  <div className="min-w-0 flex-1">
+                                    <p className="font-semibold text-gray-900 dark:text-white truncate">
                                       {option.label.replace(' (Full Apartment)', '')}
                                     </p>
-                                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                                    <p className="text-sm text-gray-600 dark:text-gray-400 truncate">
                                       {option.bedrooms !== null 
                                         ? `${option.bedrooms} ${option.bedrooms === 1 ? 'bedroom' : 'bedrooms'} available`
                                         : 'Complete apartment access'}
                                     </p>
                                   </div>
                                 </div>
-                                <div className="text-right">
-                                  <p className="font-bold text-gray-900 dark:text-white">
+                                <div className="text-right flex-shrink-0">
+                                  <p className="font-bold text-gray-900 dark:text-white whitespace-nowrap">
                                     ₦{numberWithCommas(option.price)}
                                   </p>
                                   <p className="text-xs text-gray-500 dark:text-gray-400">/night</p>
@@ -1014,9 +1016,9 @@ export default function ApartmentDetailsPage() {
                     onClick={handleCopyLink}
                     className="w-full flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0 p-3 sm:p-4 bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-200 dark:border-blue-800 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
                   >
-                    <div className="flex-1 text-left min-w-0 w-full sm:w-auto">
+                    <div className="flex-1 text-left min-w-0 w-full sm:w-auto overflow-hidden">
                       <p className="text-sm sm:text-base font-medium text-blue-900 dark:text-blue-200 mb-1">Share this apartment</p>
-                      <p className="text-xs sm:text-sm text-blue-700 dark:text-blue-300 break-all sm:truncate">{apartment.webLink}</p>
+                      <p className="text-xs sm:text-sm text-blue-700 dark:text-blue-300 break-all sm:truncate overflow-hidden">{apartment.webLink}</p>
                     </div>
                     <Copy size={18} className="sm:w-5 sm:h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 sm:ml-4 self-end sm:self-auto" />
                   </button>
@@ -1025,8 +1027,8 @@ export default function ApartmentDetailsPage() {
             </div>
 
             {/* Sidebar - Price & Booking */}
-            <div className="lg:col-span-1">
-              <div className="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 shadow-lg dark:shadow-gray-900 border border-gray-200 dark:border-gray-700 sticky top-4 sm:top-6">
+            <div className="lg:col-span-1 w-full min-w-0">
+              <div className="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 shadow-lg dark:shadow-gray-900 border border-gray-200 dark:border-gray-700 sticky top-4 sm:top-6 w-full">
                 {/* Reservation Type Selector */}
                 <div className="mb-4 sm:mb-6">
                   <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">

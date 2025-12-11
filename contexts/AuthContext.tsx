@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/lib/utils/api';
-import { loginUser as loginEndpoint, userProfile, createAccount, updateProfile, deleteAccount } from '@/lib/endpoints';
+import { loginUser as loginEndpoint, userProfile, createAccount, updateProfile, deleteAccount, forgotPassword, resetPassword } from '@/lib/endpoints';
 import toast from 'react-hot-toast';
 
 interface User {
@@ -23,11 +23,13 @@ interface AuthContextType {
   error: string | null;
   showSessionWarning: boolean;
   loginUser: (email: string, password: string) => Promise<void>;
-  createAccount: (first_name: string, last_name: string, email: string, phone: string, password: string) => Promise<void>;
+  createAccount: (firstName: string, lastName: string, email: string, phoneNumber: string, password: string) => Promise<void>;
   logout: () => void;
   getProfile: () => Promise<void>;
   updateProfile: (first_name: string, last_name: string, email: string, phone: string) => Promise<void>;
   deleteAccount: (password: string) => Promise<void>;
+  forgotPassword: (email: string) => Promise<boolean>;
+  resetPassword: (email: string, otp: string, newPassword: string, confirmNewPassword: string) => Promise<boolean>;
   extendSession: () => void;
   token: string | null;
 }
@@ -284,10 +286,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const createAccountFunction = async (
-    first_name: string,
-    last_name: string,
+    firstName: string,
+    lastName: string,
     email: string,
-    phone: string,
+    phoneNumber: string,
     password: string
   ) => {
     setLoading(true);
@@ -295,10 +297,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     try {
       const response = await api.post(createAccount, {
-        first_name,
-        last_name,
+        first_name: firstName,
+        last_name: lastName,
         email,
-        phone,
+        phone: phoneNumber,
         password,
       });
 
@@ -448,6 +450,85 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const forgotPasswordFunction = async (email: string): Promise<boolean> => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await api.post(forgotPassword, {
+        email: email.toLowerCase(),
+      });
+
+      if (response.data?.success) {
+        toast.success('OTP sent successfully! Check your email for the verification code');
+        setError(null);
+        return true;
+      } else {
+        const errorMessage = response.data?.message || 'Failed to send OTP';
+        setError(errorMessage);
+        toast.error(errorMessage);
+        return false;
+      }
+    } catch (error: any) {
+      console.error('Forgot Password Error:', error);
+      
+      let errorMessage = 'Failed to send OTP';
+      
+      if (error.response?.status === 404) {
+        errorMessage = 'Email not found. Please check your email address or create a new account.';
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+
+      setError(errorMessage);
+      toast.error(errorMessage);
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resetPasswordFunction = async (
+    email: string,
+    otp: string,
+    newPassword: string,
+    confirmNewPassword: string
+  ): Promise<boolean> => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await api.post(resetPassword, {
+        email: email.toLowerCase(),
+        otp,
+        newPassword,
+        confirmNewPassword,
+      });
+
+      if (response.data?.success) {
+        toast.success('Password reset successfully! You can now login with your new password');
+        setError(null);
+        return true;
+      } else {
+        const errorMessage = response.data?.message || 'Failed to reset password';
+        setError(errorMessage);
+        toast.error(errorMessage);
+        return false;
+      }
+    } catch (error: any) {
+      console.error('Reset Password Error:', error);
+      
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to reset password';
+      setError(errorMessage);
+      toast.error(errorMessage);
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const logout = () => {
     if (typeof window !== 'undefined') {
       localStorage.removeItem('user');
@@ -480,6 +561,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     getProfile: () => getProfile(),
     updateProfile: updateProfileFunction,
     deleteAccount: deleteAccountFunction,
+    forgotPassword: forgotPasswordFunction,
+    resetPassword: resetPasswordFunction,
     extendSession,
     token: user?.accessToken || user?.token || null,
   };

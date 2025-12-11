@@ -2,8 +2,19 @@
 const nextConfig = {
   reactStrictMode: true,
   images: {
-    domains: ['via.placeholder.com', 'localhost', 'africartz.xyz', 'api.africartz.com'],
     remotePatterns: [
+      {
+        protocol: 'http',
+        hostname: 'localhost',
+      },
+      {
+        protocol: 'https',
+        hostname: 'africartz.xyz',
+      },
+      {
+        protocol: 'https',
+        hostname: 'api.africartz.com',
+      },
       {
         protocol: 'https',
         hostname: '**',
@@ -13,6 +24,8 @@ const nextConfig = {
         hostname: '**',
       },
     ],
+    // Allow unoptimized images for external domains that might fail
+    unoptimized: false,
   },
 }
 
