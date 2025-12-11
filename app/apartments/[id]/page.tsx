@@ -340,6 +340,18 @@ export default function ApartmentDetailsPage() {
       return;
     }
 
+    if (!user) {
+      toast.error('Please log in to cancel reservation');
+      return;
+    }
+
+    // Get userId from user object (matching mobile app structure)
+    const userId = user.user?._id || user._id || user.id;
+    if (!userId) {
+      toast.error('User ID not found. Please log in again.');
+      return;
+    }
+
     if (!confirm('Are you sure you want to cancel this reservation?')) {
       return;
     }
@@ -365,10 +377,14 @@ export default function ApartmentDetailsPage() {
         return;
       }
 
+      // Include userId in request body (matching mobile app behavior)
       const response = await axios.delete(cancelReservation(reservationId), {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${authToken}`
+        },
+        data: {
+          userId: userId
         }
       });
 
