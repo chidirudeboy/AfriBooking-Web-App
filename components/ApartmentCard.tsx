@@ -32,14 +32,16 @@ export default function ApartmentCard({ apartment, reservationType = 'normal' }:
       }
     }
 
-    const fallbackImage = apartment.media?.images?.[0];
-    const firstImage = typeof fallbackImage === 'string'
-      ? fallbackImage
-      : fallbackImage && typeof fallbackImage === 'object'
-        ? fallbackImage.uri || fallbackImage.url || null
+    const firstImageData = apartment.media?.images?.[0];
+    const firstImage = typeof firstImageData === 'string'
+      ? firstImageData
+      : firstImageData && typeof firstImageData === 'object'
+        ? firstImageData.uri || firstImageData.url || null
         : null;
 
-    return reelImage || firstImage || 'https://via.placeholder.com/500x380';
+    // Fallback image as data URI to avoid external network calls
+    const defaultFallbackImage = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTAwIiBoZWlnaHQ9IjM4MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNTAwIiBoZWlnaHQ9IjM4MCIgZmlsbD0iI2YzZjRmNiIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMjAiIGZpbGw9IiM5Y2EzYWYiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5ObyBJbWFnZTwvdGV4dD48L3N2Zz4=';
+    return reelImage || firstImage || defaultFallbackImage;
   };
 
   // Calculate price based on reservation type

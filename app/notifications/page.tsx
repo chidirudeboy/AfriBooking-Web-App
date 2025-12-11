@@ -272,12 +272,23 @@ export default function NotificationsPage() {
                 const expired = isExpired(createdAt);
                 const data = parseNotificationData(notification.data);
 
+                // Determine if notification should be clickable (reservation accepted)
+                const isReservationAccepted = !expired && notificationType === 'airbnb_accept' && data?.apartment_id && data?.reservation_id;
+                const handleNotificationClick = () => {
+                  if (isReservationAccepted) {
+                    markAsRead(notification);
+                    // Route directly to booking page
+                    router.push(`/apartments/${data.apartment_id}/book?reservationId=${data.reservation_id}`);
+                  }
+                };
+
                 return (
                   <div
                     key={notificationId}
                     className={`bg-white dark:bg-gray-800 rounded-lg border-2 shadow-sm transition-all ${
                       !isRead ? 'border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20' : 'border-gray-200 dark:border-gray-700'
-                    }`}
+                    } ${isReservationAccepted ? 'cursor-pointer hover:shadow-md' : ''}`}
+                    onClick={isReservationAccepted ? handleNotificationClick : undefined}
                   >
                     <div className="p-4 sm:p-6">
                       <div className="flex items-start justify-between gap-4">
@@ -305,11 +316,16 @@ export default function NotificationsPage() {
                                   {format(new Date(createdAt), 'MMM dd, yyyy h:mm a')}
                                 </p>
                               )}
+                              {isReservationAccepted && (
+                                <p className="text-xs sm:text-sm text-green-600 dark:text-green-400 mt-2 font-medium">
+                                  Click to book now →
+                                </p>
+                              )}
                             </div>
                           </div>
                         </div>
 
-                        <div className="flex items-start gap-2 flex-shrink-0">
+                        <div className="flex items-start gap-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
                           {!isRead && (
                             <button
                               onClick={() => markAsRead(notification)}
@@ -329,21 +345,15 @@ export default function NotificationsPage() {
                         </div>
                       </div>
 
-                      {/* Action Buttons */}
-                      {!expired && isRead && notificationType === 'airbnb_accept' && data?.apartment_id && (
-                        <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 flex gap-2">
+                      {/* Action Button - Show for accepted reservations */}
+                      {isReservationAccepted && (
+                        <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 flex gap-2" onClick={(e) => e.stopPropagation()}>
                           <button
-                            onClick={() => {
-                              markAsRead(notification);
-                              if (data.reservation_id) {
-                                router.push(`/apartments/${data.apartment_id}?reservation=${data.reservation_id}`);
-                              } else {
-                                router.push(`/apartments/${data.apartment_id}`);
-                              }
-                            }}
-                            className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors text-sm sm:text-base"
+                            onClick={handleNotificationClick}
+                            className="flex-1 px-4 py-2 bg-gradient-to-r from-primary-light to-primary-dark text-white rounded-lg font-semibold hover:opacity-90 transition-opacity text-sm sm:text-base flex items-center justify-center gap-2"
                           >
-                            Pay Now
+                            <span>Book Now</span>
+                            <Calendar size={18} />
                           </button>
                         </div>
                       )}

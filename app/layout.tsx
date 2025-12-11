@@ -20,6 +20,8 @@ export const viewport: Viewport = {
   maximumScale: 5,
   userScalable: true,
   viewportFit: 'cover',
+  // Prevent zoom on input focus (iOS Safari)
+  interactiveWidget: 'resizes-content',
 }
 
 export default function RootLayout({

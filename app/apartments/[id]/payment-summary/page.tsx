@@ -310,7 +310,7 @@ function PaymentSummaryContent() {
     ? (typeof apartment.media.images[0] === 'string' 
         ? apartment.media.images[0] 
         : apartment.media.images[0]?.uri || apartment.media.images[0]?.url || '')
-    : 'https://via.placeholder.com/500x380';
+    : 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTAwIiBoZWlnaHQ9IjM4MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNTAwIiBoZWlnaHQ9IjM4MCIgZmlsbD0iI2YzZjRmNiIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMjAiIGZpbGw9IiM5Y2EzYWYiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5ObyBJbWFnZTwvdGV4dD48L3N2Zz4=';
 
   return (
     <div className="flex min-h-screen bg-gray-50 dark:bg-gray-900">
