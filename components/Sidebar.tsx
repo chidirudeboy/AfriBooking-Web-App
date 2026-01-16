@@ -21,12 +21,14 @@ import {
   Sun,
   Moon,
   Smartphone,
-  ExternalLink
+  ExternalLink,
+  FileText
 } from 'lucide-react';
 
 const navigation = [
   { name: 'Apartments', href: '/apartments', icon: Home },
   { name: 'Bookings', href: '/bookings', icon: Calendar },
+  { name: 'Requests', href: '/requests', icon: FileText },
   { name: 'Messages', href: '/messages', icon: MessageSquare },
   { name: 'Notifications', href: '/notifications', icon: Bell },
   { name: 'Profile', href: '/profile', icon: User },

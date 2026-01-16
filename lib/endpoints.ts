@@ -69,3 +69,11 @@ export const sendChatMessage = (chatId: string) => endpoint2(`chat/${chatId}/mes
 export const markChatAsRead = (chatId: string) => endpoint2(`chat/${chatId}/read`);
 export const closeChat = (chatId: string) => endpoint2(`chat/${chatId}/close`);
 
+// Request endpoints
+export const createUserRequest = endpoint2("user/request/create");
+export const getUserRequests = (status?: string, page = 1, limit = 10) => 
+  endpoint2(`user/request/my-requests?page=${page}&limit=${limit}${status ? `&status=${status}` : ''}`);
+export const getRequestResponses = (requestId: string) => endpoint2(`user/request/${requestId}/responses`);
+export const closeUserRequest = (requestId: string) => endpoint2(`user/request/${requestId}/close`);
+export const bookFromRequestResponse = (requestId: string, requestResponseId: string, apartmentId: string) => 
+	endpoint2(`bookings/request/${requestId}/response/${requestResponseId}/apartment/${apartmentId}/book`);

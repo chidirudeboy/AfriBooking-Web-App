@@ -7,7 +7,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useSidebar } from '@/contexts/SidebarContext';
 import Sidebar from '@/components/Sidebar';
 import { TApartments } from '@/lib/types/airbnb';
-import { getSingleApartmentUserDetails, getEveryApartments, bookAndPay, paymentHistory } from '@/lib/endpoints';
+import { getSingleApartmentUserDetails, getEveryApartments, bookAndPay, paymentHistory, bookFromRequestResponse } from '@/lib/endpoints';
 import axios from 'axios';
 import { 
   ArrowLeft, User, Mail, Phone, Shield, AlertCircle, 
@@ -23,6 +23,11 @@ function BookApartmentContent() {
   const apartmentId = params?.id as string;
   const reservationId = searchParams?.get('reservationId') || '';
   const selectedBedroomsParam = searchParams?.get('selectedBedrooms');
+  const checkInDateParam = searchParams?.get('checkInDate') || '';
+  const checkOutDateParam = searchParams?.get('checkOutDate') || '';
+  const fromRequestResponse = searchParams?.get('fromRequestResponse') === 'true';
+  const requestId = searchParams?.get('requestId') || '';
+  const requestResponseId = searchParams?.get('requestResponseId') || '';
 
   const [apartment, setApartment] = useState<TApartments | null>(null);
   const [loading, setLoading] = useState(true);
@@ -61,14 +66,15 @@ function BookApartmentContent() {
     if (apartmentId) {
       fetchApartmentDetails();
     }
-    if (reservationId) {
+    // Only fetch reservation data if it's NOT a request response booking
+    if (reservationId && !fromRequestResponse) {
       fetchReservationData();
     }
     // Pre-fill email from user if available
     if (user?.email || user?.user?.email) {
       setEmail(user.email || user.user.email);
     }
-  }, [user, router, apartmentId, reservationId]);
+  }, [user, router, apartmentId, reservationId, fromRequestResponse]);
 
   const fetchReservationData = async () => {
     if (!reservationId || !user) return;
@@ -124,7 +130,11 @@ function BookApartmentContent() {
       }
 
       try {
-        const response = await axios.get(`${getSingleApartmentUserDetails}?apartmentId=${apartmentId}`, {
+        // Backend uses path parameter: /api/apartment/getSingleApartmentUser/:apartmentId
+        const endpointUrl = `${getSingleApartmentUserDetails}/${apartmentId}`;
+        console.log('📡 Fetching apartment from URL:', endpointUrl);
+        
+        const response = await axios.get(endpointUrl, {
           headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
@@ -133,14 +143,20 @@ function BookApartmentContent() {
           timeout: 15000
         });
 
-        if (response.data?.data || response.data?.apartment) {
-          const apt = response.data?.data || response.data?.apartment;
-          setApartment(apt);
+        console.log('📡 Apartment fetch response:', response.data);
+
+        // Backend returns: { apartment: {...} } or { data: {...} }
+        if (response.data?.apartment) {
+          setApartment(response.data.apartment);
+          setLoading(false);
+          return;
+        } else if (response.data?.data) {
+          setApartment(response.data.data);
           setLoading(false);
           return;
         }
-      } catch (error) {
-        console.log('Single apartment fetch failed, trying all apartments...');
+      } catch (error: any) {
+        console.log('⚠️ Single apartment fetch failed, trying all apartments...', error.response?.data || error.message);
       }
 
       const response = await axios.get(getEveryApartments, {
@@ -161,10 +177,20 @@ function BookApartmentContent() {
         apartments = response.data;
       }
 
-      const foundApartment = apartments.find(apt => apt._id === apartmentId);
+      // Try to find apartment by matching _id or id (handle both string and ObjectId formats)
+      const foundApartment = apartments.find(apt => {
+        const aptId = apt._id || apt.id;
+        if (!aptId) return false;
+        // Convert both to strings for comparison
+        return String(aptId) === String(apartmentId);
+      });
+      
       if (foundApartment) {
+        console.log('✅ Found apartment in list:', foundApartment._id || foundApartment.id);
         setApartment(foundApartment);
       } else {
+        console.error('❌ Apartment not found. Looking for:', apartmentId);
+        console.error('Available apartment IDs:', apartments.map(apt => apt._id || apt.id).slice(0, 5));
         toast.error('Apartment not found');
         router.push('/apartments');
       }
@@ -199,9 +225,22 @@ function BookApartmentContent() {
   };
 
   const validateForm = () => {
-    if (!reservationId) {
-      toast.error('Reservation ID is missing. Please go back and make a new reservation request.');
-      return false;
+    // For request response bookings, we need requestId, requestResponseId, and apartmentId
+    if (fromRequestResponse) {
+      if (!requestId || !requestResponseId || !apartmentId) {
+        const missing = [];
+        if (!requestId) missing.push('Request ID');
+        if (!requestResponseId) missing.push('Response ID');
+        if (!apartmentId) missing.push('Apartment ID');
+        toast.error(`Missing booking information: ${missing.join(', ')}. Please go back and try again.`);
+        return false;
+      }
+    } else {
+      // For regular reservations, we need reservationId
+      if (!reservationId) {
+        toast.error('Reservation ID is missing. Please go back and make a new reservation request.');
+        return false;
+      }
     }
 
     if (!firstName.trim()) {
@@ -267,13 +306,237 @@ function BookApartmentContent() {
         }
       }
 
+      console.log('🔍 Booking Payment Debug:', {
+        fromRequestResponse,
+        requestId,
+        requestResponseId,
+        apartmentId,
+        reservationId,
+        hasRequestId: !!requestId,
+        hasRequestResponseId: !!requestResponseId,
+        hasApartmentId: !!apartmentId,
+        hasReservationId: !!reservationId,
+      });
+
+      // Handle request response flow (bypasses reservation)
+      if (fromRequestResponse) {
+        // If fromRequestResponse is true, we MUST use request response flow
+        // Don't fall through to regular reservation flow
+        if (!requestId || !requestResponseId || !apartmentId || !checkInDateParam || !checkOutDateParam) {
+          const missing = [];
+          if (!requestId) missing.push('Request ID');
+          if (!requestResponseId) missing.push('Response ID');
+          if (!apartmentId) missing.push('Apartment ID');
+          if (!checkInDateParam) missing.push('Check-in Date');
+          if (!checkOutDateParam) missing.push('Check-out Date');
+          toast.error(`Missing booking information: ${missing.join(', ')}. Please go back and try again.`);
+          setSubmitting(false);
+          return;
+        }
+
+        try {
+          console.log('🔍 Request Response Payment Debug:', {
+            fromRequestResponse,
+            requestId,
+            requestResponseId,
+            apartmentId,
+          });
+
+          // Create FormData for file upload
+        const formData = new FormData();
+        
+        // Add customer info
+        formData.append('customerInfo[firstName]', firstName.trim());
+        formData.append('customerInfo[lastName]', lastName.trim());
+        formData.append('customerInfo[email]', email.trim());
+        formData.append('customerInfo[phone]', phone.trim());
+        
+        // Add identification details
+        formData.append('meansOfIdentification', meansOfId);
+        formData.append('identificationNumber', idNumber.trim());
+        
+        // Add emergency contact
+        formData.append('emergencyContact[name]', emergencyName.trim());
+        formData.append('emergencyContact[phone]', emergencyPhone.trim());
+        
+        // Add other fields
+        formData.append('acceptRefundPolicy', 'true');
+        formData.append('specialRequests', '');
+        
+        // Add selectedBedrooms if provided
+        if (selectedBedrooms !== null && selectedBedrooms !== undefined) {
+          formData.append('selectedBedrooms', selectedBedrooms.toString());
+        }
+        
+        // Add dates - required by backend API for request response bookings
+        // Convert to ISO string format to match mobile app and backend expectations
+        if (checkInDateParam) {
+          // If it's already an ISO string, use it; otherwise convert date string to ISO
+          const checkInDateValue = checkInDateParam.includes('T') 
+            ? checkInDateParam 
+            : new Date(checkInDateParam).toISOString();
+          formData.append('checkInDate', checkInDateValue);
+        }
+        if (checkOutDateParam) {
+          // If it's already an ISO string, use it; otherwise convert date string to ISO
+          const checkOutDateValue = checkOutDateParam.includes('T') 
+            ? checkOutDateParam 
+            : new Date(checkOutDateParam).toISOString();
+          formData.append('checkOutDate', checkOutDateValue);
+        }
+        
+        // Add apartmentId explicitly (though it's in the URL path, backend may require it in FormData)
+        if (apartmentId) {
+          formData.append('apartmentId', apartmentId);
+        }
+        
+        // Add identification image if available
+        if (uploadedIDDisplay) {
+          formData.append('identificationImage', uploadedIDDisplay);
+        }
+
+        console.log('📄 Calling bookFromRequestResponse API', {
+          requestId,
+          requestResponseId,
+          apartmentId,
+          checkInDate: checkInDateParam,
+          checkOutDate: checkOutDateParam,
+          selectedBedrooms,
+        });
+        
+        const response = await fetch(bookFromRequestResponse(requestId, requestResponseId, apartmentId), {
+          method: 'POST',
+          headers: {
+            ...(authToken && { 'Authorization': `Bearer ${authToken}` })
+          },
+          body: formData
+        });
+
+        const data = await response.json();
+        console.log('📄 bookFromRequestResponse response:', JSON.stringify(data, null, 2));
+
+        if (data.status === 'success' && data.data?.payment?.authorizationUrl) {
+          console.log('✅ Payment URL received, opening payment modal');
+          const paymentUrl = data.data.payment.authorizationUrl;
+          setPaymentUrl(paymentUrl);
+          setShowPaymentModal(true);
+          
+          // Set up payment callback listener (same as below)
+          const handlePaymentCallback = (event: MessageEvent) => {
+            console.log('📨 Received message event:', event);
+            if (event.data && typeof event.data === 'object') {
+              if (event.data.status === 'success' || event.data.reference) {
+                console.log('✅ Payment success detected via postMessage:', event.data);
+                const reference = event.data.reference || event.data.trxref;
+                handlePaymentSuccess(reference);
+                window.removeEventListener('message', handlePaymentCallback);
+              }
+            } else if (typeof event.data === 'string') {
+              try {
+                const parsed = JSON.parse(event.data);
+                if (parsed.status === 'success' || parsed.reference) {
+                  console.log('✅ Payment success detected via postMessage (string):', parsed);
+                  const reference = parsed.reference || parsed.trxref;
+                  handlePaymentSuccess(reference);
+                  window.removeEventListener('message', handlePaymentCallback);
+                }
+              } catch (e) {
+                // Not JSON, ignore
+              }
+            }
+          };
+          
+          window.addEventListener('message', handlePaymentCallback);
+          
+          // Also check for URL changes in the iframe
+          let checkInterval: NodeJS.Timeout | null = null;
+          const startUrlChecking = () => {
+            checkInterval = setInterval(() => {
+              const iframe = document.querySelector('iframe[title="Payment"]') as HTMLIFrameElement;
+              if (iframe?.contentWindow) {
+                try {
+                  const iframeUrl = iframe.contentWindow.location.href;
+                  console.log('🔍 Checking iframe URL:', iframeUrl);
+                  
+                  if (iframeUrl.includes('success') || iframeUrl.includes('callback') || iframeUrl.includes('reference=')) {
+                    console.log('✅ Payment success detected from iframe URL');
+                    if (checkInterval) clearInterval(checkInterval);
+                    
+                    const urlParams = new URLSearchParams(iframeUrl.split('?')[1] || '');
+                    const reference = urlParams.get('reference') || urlParams.get('trxref');
+                    handlePaymentSuccess(reference || undefined);
+                  } else if (iframeUrl.includes('cancel') || iframeUrl.includes('close') || iframeUrl.includes('standard.paystack.co/close')) {
+                    console.log('❌ Payment cancelled');
+                    if (checkInterval) clearInterval(checkInterval);
+                    setShowPaymentModal(false);
+                    toast.error('Payment was cancelled');
+                  }
+                } catch (e) {
+                  // Cross-origin error is expected, ignore
+                }
+              }
+            }, 1000);
+          };
+          
+          setTimeout(startUrlChecking, 2000);
+          
+          const cleanup = () => {
+            window.removeEventListener('message', handlePaymentCallback);
+            if (checkInterval) {
+              clearInterval(checkInterval);
+              checkInterval = null;
+            }
+          };
+          
+          (window as any).__paymentCleanup = cleanup;
+          return; // Exit early for request response flow
+        } else {
+          const errorMsg = data.message || data.error || 'Failed to initiate payment';
+          console.error('❌ bookFromRequestResponse failed:', errorMsg, data);
+          throw new Error(errorMsg);
+        }
+        } catch (requestResponseError: any) {
+        // Handle errors specifically for request response flow
+        console.error('❌ Error in request response booking flow:', requestResponseError);
+        let errorMessage = 'Failed to initiate payment. Please try again.';
+        
+        if (requestResponseError instanceof Error) {
+          errorMessage = requestResponseError.message;
+        } else if (requestResponseError.response) {
+          try {
+            const errorData = await requestResponseError.response.json().catch(() => ({}));
+            errorMessage = errorData.message || errorData.error || errorMessage;
+          } catch (e) {
+            errorMessage = requestResponseError.response.statusText || errorMessage;
+          }
+        }
+        
+        toast.error(errorMessage, {
+          duration: 6000,
+          style: {
+            maxWidth: '500px',
+          },
+        });
+        setSubmitting(false);
+        return; // Exit - don't fall through to regular reservation flow
+      }
+    }
+
+    // Regular reservation flow (only runs if NOT fromRequestResponse)
+    // Safety check: if fromRequestResponse is true, we should never reach here
+    if (fromRequestResponse) {
+      console.error('❌ ERROR: fromRequestResponse is true but reached regular reservation flow!');
+      toast.error('Invalid booking flow. Please go back and try again.');
+      setSubmitting(false);
+      return;
+    }
       // Verify reservation status before attempting payment
-      if (reservationId && !reservationData) {
+      if (!fromRequestResponse && reservationId && !reservationData) {
         await fetchReservationData();
       }
 
-      // Check if reservation is still valid
-      if (reservationData && reservationData.status !== 'accepted') {
+      // Check if reservation is still valid (only for regular reservations)
+      if (!fromRequestResponse && reservationData && reservationData.status !== 'accepted') {
         toast.error('Your reservation is not accepted. Please wait for approval before booking.', {
           duration: 5000,
         });
@@ -467,7 +730,9 @@ function BookApartmentContent() {
         }
       }
 
-      if (authToken && reservationId) {
+      // For request response bookings, payment is already confirmed via bookFromRequestResponse
+      // Only need to confirm for regular reservations
+      if (authToken && !fromRequestResponse && reservationId) {
         // Create FormData for payment confirmation
         const confirmationFormData = new FormData();
         
@@ -516,6 +781,8 @@ function BookApartmentContent() {
         } else {
           console.warn('⚠️ Payment confirmation failed, but payment was successful');
         }
+      } else if (fromRequestResponse) {
+        console.log('✅ Request response booking - payment already confirmed via bookFromRequestResponse');
       }
     } catch (error) {
       console.error('⚠️ Error confirming payment with backend:', error);
