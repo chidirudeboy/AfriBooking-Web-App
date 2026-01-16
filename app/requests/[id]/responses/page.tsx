@@ -280,7 +280,7 @@ export default function RequestResponsesPage() {
       apartmentId = apt;
     } else if (apt) {
       // If it's an object, extract the ID (already a single apartment object from the map)
-      apartmentId = apt._id || apt.id || null;
+      apartmentId = apt._id || (apt as any).id || null;
       apartmentData = apt;
     }
     
