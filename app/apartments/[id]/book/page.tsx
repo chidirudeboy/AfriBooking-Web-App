@@ -179,18 +179,18 @@ function BookApartmentContent() {
 
       // Try to find apartment by matching _id or id (handle both string and ObjectId formats)
       const foundApartment = apartments.find(apt => {
-        const aptId = apt._id || apt.id;
+        const aptId = apt._id || (apt as any).id;
         if (!aptId) return false;
         // Convert both to strings for comparison
         return String(aptId) === String(apartmentId);
       });
       
       if (foundApartment) {
-        console.log('✅ Found apartment in list:', foundApartment._id || foundApartment.id);
+        console.log('✅ Found apartment in list:', foundApartment._id || (foundApartment as any).id);
         setApartment(foundApartment);
       } else {
         console.error('❌ Apartment not found. Looking for:', apartmentId);
-        console.error('Available apartment IDs:', apartments.map(apt => apt._id || apt.id).slice(0, 5));
+        console.error('Available apartment IDs:', apartments.map(apt => apt._id || (apt as any).id).slice(0, 5));
         toast.error('Apartment not found');
         router.push('/apartments');
       }
