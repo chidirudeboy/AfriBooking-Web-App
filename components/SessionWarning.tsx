@@ -19,7 +19,7 @@ export default function SessionWarning() {
             <h3 className="text-sm font-semibold text-yellow-900 dark:text-yellow-100 mb-1">
               Session Expiring Soon
             </h3>
-            <p className="text-xs text-yellow-800 dark:text-yellow-200 mb-3">
+            <p className="text-sm text-yellow-800 dark:text-yellow-200 mb-3">
               Your session will expire in 5 minutes due to inactivity. Click "Stay Logged In" to continue.
             </p>
             <div className="flex gap-2">

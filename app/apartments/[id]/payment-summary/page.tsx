@@ -29,6 +29,9 @@ function PaymentSummaryContent() {
   const checkInDate = searchParams?.get('checkInDate') || '';
   const checkOutDate = searchParams?.get('checkOutDate') || '';
   const numberOfNightsParam = searchParams?.get('numberOfNights');
+  const fromRequestResponse = searchParams?.get('fromRequestResponse') === 'true';
+  const requestId = searchParams?.get('requestId') || '';
+  const requestResponseId = searchParams?.get('requestResponseId') || '';
 
   const [apartment, setApartment] = useState<TApartments | null>(null);
   const [loading, setLoading] = useState(true);
@@ -45,10 +48,11 @@ function PaymentSummaryContent() {
     if (apartmentId) {
       fetchApartmentDetails();
     }
-    if (reservationId) {
+    // Only fetch reservation data if it's NOT a request response booking
+    if (reservationId && !fromRequestResponse) {
       fetchReservationData();
     }
-  }, [user, router, apartmentId, reservationId]);
+  }, [user, router, apartmentId, reservationId, fromRequestResponse]);
 
   const fetchApartmentDetails = async () => {
     try {
@@ -68,7 +72,11 @@ function PaymentSummaryContent() {
       }
 
       try {
-        const response = await axios.get(`${getSingleApartmentUserDetails}?apartmentId=${apartmentId}`, {
+        // Backend uses path parameter: /api/apartment/getSingleApartmentUser/:apartmentId
+        const endpointUrl = `${getSingleApartmentUserDetails}/${apartmentId}`;
+        console.log('📡 Fetching apartment from URL:', endpointUrl);
+        
+        const response = await axios.get(endpointUrl, {
           headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
@@ -77,14 +85,20 @@ function PaymentSummaryContent() {
           timeout: 15000
         });
 
-        if (response.data?.data || response.data?.apartment) {
-          const apt = response.data?.data || response.data?.apartment;
-          setApartment(apt);
+        console.log('📡 Apartment fetch response:', response.data);
+
+        // Backend returns: { apartment: {...} } or { data: {...} }
+        if (response.data?.apartment) {
+          setApartment(response.data.apartment);
+          setLoading(false);
+          return;
+        } else if (response.data?.data) {
+          setApartment(response.data.data);
           setLoading(false);
           return;
         }
-      } catch (error) {
-        console.log('Single apartment fetch failed, trying all apartments...');
+      } catch (error: any) {
+        console.log('⚠️ Single apartment fetch failed, trying all apartments...', error.response?.data || error.message);
       }
 
       const response = await axios.get(getEveryApartments, {
@@ -105,10 +119,20 @@ function PaymentSummaryContent() {
         apartments = response.data;
       }
 
-      const foundApartment = apartments.find(apt => apt._id === apartmentId);
+      // Try to find apartment by matching _id or id (handle both string and ObjectId formats)
+      const foundApartment = apartments.find(apt => {
+        const aptId = apt._id || (apt as any).id;
+        if (!aptId) return false;
+        // Convert both to strings for comparison
+        return String(aptId) === String(apartmentId);
+      });
+      
       if (foundApartment) {
+        console.log('✅ Found apartment in list:', foundApartment._id || (foundApartment as any).id);
         setApartment(foundApartment);
       } else {
+        console.error('❌ Apartment not found. Looking for:', apartmentId);
+        console.error('Available apartment IDs:', apartments.map(apt => apt._id || (apt as any).id).slice(0, 5));
         toast.error('Apartment not found');
         router.push('/apartments');
       }
@@ -253,23 +277,57 @@ function PaymentSummaryContent() {
   };
 
   const handleProceedToPayment = () => {
-    if (!apartment || !reservationId) {
+    if (!apartment) {
       toast.error('Missing required information');
       return;
     }
 
+    // For request response bookings, we need requestId, requestResponseId, and apartmentId
+    // For regular reservations, we need reservationId
+    if (fromRequestResponse) {
+      if (!requestId || !requestResponseId || !apartmentId) {
+        toast.error('Missing required booking information');
+        return;
+      }
+    } else {
+      if (!reservationId) {
+        toast.error('Missing reservation information');
+        return;
+      }
+    }
+
     const params = new URLSearchParams();
-    params.set('reservationId', reservationId);
-    if (selectedBedrooms !== null) {
-      params.set('selectedBedrooms', selectedBedrooms.toString());
+    
+    if (fromRequestResponse) {
+      // Pass request response parameters - match mobile app navigation params
+      params.set('fromRequestResponse', 'true');
+      params.set('requestId', requestId);
+      params.set('requestResponseId', requestResponseId);
+      if (selectedBedrooms !== null) {
+        params.set('selectedBedrooms', selectedBedrooms.toString());
+      }
+      // Pass dates and numberOfNights for request response bookings (match mobile app)
+      if (finalCheckInDate) {
+        params.set('checkInDate', finalCheckInDate);
+      }
+      if (finalCheckOutDate) {
+        params.set('checkOutDate', finalCheckOutDate);
+      }
+      params.set('numberOfNights', nights.toString());
+    } else {
+      // Pass regular reservation parameters
+      params.set('reservationId', reservationId);
+      if (selectedBedrooms !== null) {
+        params.set('selectedBedrooms', selectedBedrooms.toString());
+      }
+      if (finalCheckInDate) {
+        params.set('checkInDate', finalCheckInDate);
+      }
+      if (finalCheckOutDate) {
+        params.set('checkOutDate', finalCheckOutDate);
+      }
+      params.set('numberOfNights', nights.toString());
     }
-    if (finalCheckInDate) {
-      params.set('checkInDate', finalCheckInDate);
-    }
-    if (finalCheckOutDate) {
-      params.set('checkOutDate', finalCheckOutDate);
-    }
-    params.set('numberOfNights', nights.toString());
     
     router.push(`/apartments/${apartmentId}/book?${params.toString()}`);
   };
