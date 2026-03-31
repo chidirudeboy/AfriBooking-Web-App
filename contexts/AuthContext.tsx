@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/lib/utils/api';
-import { loginUser as loginEndpoint, userProfile, createAccount, updateProfile, deleteAccount, forgotPassword, resetPassword } from '@/lib/endpoints';
+import { loginUser as loginEndpoint, userProfile, createAccount, updateProfile, deleteAccount, forgotPassword, resetPassword, requestEmailVerification } from '@/lib/endpoints';
 import toast from 'react-hot-toast';
 
 interface User {
@@ -164,6 +164,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             
             // Check if token is expired on load
             const token = parsedUser.accessToken || parsedUser.token;
+            if (!token) {
+              localStorage.removeItem('user');
+              return;
+            }
             if (token && isTokenExpired(token)) {
               localStorage.removeItem('user');
               return;
@@ -318,8 +322,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setLastActivity(Date.now()); // Reset activity timer on signup
         setError(null);
 
+        const emailVerified =
+          response.data.user?.emailVerified ??
+          response.data.user?.isEmailVerified ??
+          response.data.user?.verified;
+
         toast.success('Registration Successful');
-        router.push('/apartments');
+        if (emailVerified === false) {
+          try {
+            await api.post(requestEmailVerification, { email });
+          } catch {
+            // ignore
+          }
+          router.push(`/verify-email?email=${encodeURIComponent(email)}`);
+        } else {
+          router.push('/apartments');
+        }
       } else {
         toast.error(response.data.message || 'Registration failed');
         setError(response.data.message || 'Registration failed');
@@ -577,4 +595,3 @@ export const useAuth = () => {
   }
   return context;
 };
-

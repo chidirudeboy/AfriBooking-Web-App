@@ -5,6 +5,7 @@ import { AuthProvider } from '@/contexts/AuthContext'
 import { SidebarProvider } from '@/contexts/SidebarContext'
 import { ThemeWrapper } from '@/components/ThemeWrapper'
 import SessionWarning from '@/components/SessionWarning'
+import AppUpdateBanner from '@/components/AppUpdateBanner'
 import { Toaster } from 'react-hot-toast'
 
 const inter = Inter({ subsets: ['latin'] })
@@ -35,6 +36,7 @@ export default function RootLayout({
         <ThemeWrapper>
           <AuthProvider>
             <SidebarProvider>
+              <AppUpdateBanner />
               {children}
               <SessionWarning />
               <Toaster 
@@ -52,4 +54,3 @@ export default function RootLayout({
     </html>
   )
 }
-

@@ -6,12 +6,12 @@ import Image from 'next/image';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSidebar } from '@/contexts/SidebarContext';
 import Sidebar from '@/components/Sidebar';
-import { getRequestResponses, getSingleApartmentUserDetails } from '@/lib/endpoints';
+import { getRequestResponses, getSingleApartmentUserDetails, deleteUserRequest } from '@/lib/endpoints';
 import api from '@/lib/utils/api';
 import axios from 'axios';
 import { 
   ArrowLeft, MessageSquare, Bed, Bath, MapPin, 
-  FileText, Eye, CreditCard, User, RefreshCw
+  FileText, Eye, CreditCard, User, RefreshCw, Trash2
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format, differenceInDays, differenceInHours, differenceInMinutes, parseISO } from 'date-fns';
@@ -129,6 +129,18 @@ export default function RequestResponsesPage() {
   const onRefresh = () => {
     setRefreshing(true);
     fetchResponses();
+  };
+
+  const handleDeleteRequest = async () => {
+    if (!requestId) return;
+    if (!confirm('Permanently delete this request and all responses? This cannot be undone.')) return;
+    try {
+      await api.delete(deleteUserRequest(requestId));
+      toast.success('Request deleted');
+      router.push('/requests');
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Failed to delete request');
+    }
   };
 
   // Fetch full apartment details for apartments missing name/location data
@@ -489,6 +501,13 @@ export default function RequestResponsesPage() {
                 className="w-10 h-10 rounded-full bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 flex items-center justify-center transition-colors disabled:opacity-50"
               >
                 <RefreshCw className={`w-5 h-5 text-gray-700 dark:text-gray-300 ${refreshing ? 'animate-spin' : ''}`} />
+              </button>
+              <button
+                onClick={handleDeleteRequest}
+                className="w-10 h-10 rounded-full bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 flex items-center justify-center transition-colors"
+                title="Delete request"
+              >
+                <Trash2 className="w-5 h-5 text-red-600 dark:text-red-400" />
               </button>
             </div>
           </div>

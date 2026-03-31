@@ -1,14 +1,15 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSidebar } from '@/contexts/SidebarContext';
 import Sidebar from '@/components/Sidebar';
-import { createUserRequest } from '@/lib/endpoints';
+import { createUserRequest, getUserRequests } from '@/lib/endpoints';
 import api from '@/lib/utils/api';
 import { ArrowLeft, FileText, Send } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { containsBlockedContactDetails, BLOCKED_MESSAGE } from '@/lib/utils/chatContentCheck';
 
 export default function CreateRequestPage() {
   const router = useRouter();
@@ -25,11 +26,32 @@ export default function CreateRequestPage() {
   const [checkInDate, setCheckInDate] = useState('');
   const [checkOutDate, setCheckOutDate] = useState('');
   const [loading, setLoading] = useState(false);
+  const [activeRequestCount, setActiveRequestCount] = useState<number | null>(null);
+
+  const MAX_ACTIVE_REQUESTS = 5;
 
   if (!user) {
     router.push('/login');
     return null;
   }
+
+  useEffect(() => {
+    if (!user?.user?._id) {
+      setActiveRequestCount(null);
+      return;
+    }
+    const fetchActiveRequests = async () => {
+      try {
+        const response = await api.get(getUserRequests('active', 1, 100));
+        const list = response.data?.requests ?? [];
+        const total = response.data?.pagination?.total;
+        setActiveRequestCount(typeof total === 'number' ? total : list.length);
+      } catch {
+        setActiveRequestCount(null);
+      }
+    };
+    fetchActiveRequests();
+  }, [user?.user?._id]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -85,6 +107,22 @@ export default function CreateRequestPage() {
         toast.error('Maximum budget must be greater than or equal to minimum budget');
         return;
       }
+    }
+
+    if (additionalNotes.trim() && containsBlockedContactDetails(additionalNotes)) {
+      toast.error(BLOCKED_MESSAGE);
+      return;
+    }
+
+    if (activeRequestCount !== null && activeRequestCount >= MAX_ACTIVE_REQUESTS) {
+      toast.error(`You have reached the maximum of ${MAX_ACTIVE_REQUESTS} active requests. Please close an existing request first.`);
+      return;
+    }
+
+    if (!user?.accessToken && !user?.token) {
+      toast.error('Please log in to create a request.');
+      router.push('/login');
+      return;
     }
 
     setLoading(true);

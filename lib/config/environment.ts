@@ -6,6 +6,9 @@ export interface EnvironmentConfig {
   apiTimeout: number;
   appName: string;
   debugMode: boolean;
+  appVersion: string;
+  minSupportedVersionWeb: string;
+  webUpdateUrl?: string;
 }
 
 // Simple environment configuration using process.env directly
@@ -48,6 +51,9 @@ export const config: EnvironmentConfig = {
   apiTimeout: parseInt(process.env.NEXT_PUBLIC_API_TIMEOUT || '15000'),
   appName: process.env.NEXT_PUBLIC_APP_NAME || 'AfriBooking',
   debugMode: process.env.NEXT_PUBLIC_DEBUG_MODE === 'true',
+  appVersion: process.env.NEXT_PUBLIC_APP_VERSION || '0.0.0',
+  minSupportedVersionWeb: process.env.NEXT_PUBLIC_MIN_SUPPORTED_WEB_VERSION || '0.0.0',
+  webUpdateUrl: process.env.NEXT_PUBLIC_WEB_UPDATE_URL,
 };
 
 // Debug logging (only in development or when debug mode is enabled)
@@ -70,6 +76,9 @@ export const {
   apiTimeout,
   appName,
   debugMode,
+  appVersion,
+  minSupportedVersionWeb,
+  webUpdateUrl,
 } = config;
 
 // Development helpers
@@ -78,4 +87,3 @@ export const isStaging = env === 'staging';
 export const isProd = env === 'production';
 
 export default config;
-
