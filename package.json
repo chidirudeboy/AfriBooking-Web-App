@@ -3,10 +3,12 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "dev:clean": "rm -rf .next && next dev",
+    "dev": "PORT_ENV_FILES=.env.development.local DEFAULT_PORT=3002 node scripts/run-with-port.js next dev",
+    "dev:clean": "rm -rf .next && PORT_ENV_FILES=.env.development.local DEFAULT_PORT=3002 node scripts/run-with-port.js next dev",
+    "dev:prod": "NEXT_PUBLIC_BASE_URL=https://api.africartz.com/api NEXT_PUBLIC_ENV=production PORT_ENV_FILES=.env.development.local,.env.production DEFAULT_PORT=3002 node scripts/run-with-port.js next dev",
     "build": "next build",
-    "start": "next start",
+    "build:prod": "next build",
+    "start": "PORT_ENV_FILES=.env.production,.env.development.local DEFAULT_PORT=3002 node scripts/run-with-port.js next start",
     "lint": "next lint",
     "clear-cache": "rm -rf .next"
   },
@@ -31,4 +33,3 @@
     "eslint-config-next": "^14.2.0"
   }
 }
-

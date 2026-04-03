@@ -13,7 +13,7 @@ import { containsBlockedContactDetails, BLOCKED_MESSAGE } from '@/lib/utils/chat
 
 export default function CreateRequestPage() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const { isCollapsed } = useSidebar();
   const [bedrooms, setBedrooms] = useState('');
   const [city, setCity] = useState('');
@@ -30,10 +30,11 @@ export default function CreateRequestPage() {
 
   const MAX_ACTIVE_REQUESTS = 5;
 
-  if (!user) {
-    router.push('/login');
-    return null;
-  }
+  useEffect(() => {
+    if (!authLoading && !user) {
+      router.push('/login');
+    }
+  }, [authLoading, router, user]);
 
   useEffect(() => {
     if (!user?.user?._id) {
@@ -163,6 +164,10 @@ export default function CreateRequestPage() {
     }
     return '';
   };
+
+  if (authLoading || !user) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">

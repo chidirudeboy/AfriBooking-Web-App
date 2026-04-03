@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSidebar } from '@/contexts/SidebarContext';
@@ -68,8 +68,13 @@ export default function SettingsPage() {
   const [deletePassword, setDeletePassword] = useState('');
   const [showPasswordInput, setShowPasswordInput] = useState(false);
 
-  if (!user) {
-    router.push('/login');
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push('/login');
+    }
+  }, [loading, router, user]);
+
+  if (loading || !user) {
     return null;
   }
 
@@ -236,4 +241,3 @@ export default function SettingsPage() {
     </div>
   );
 }
-

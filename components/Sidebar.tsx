@@ -22,11 +22,13 @@ import {
   Moon,
   Smartphone,
   ExternalLink,
-  FileText
+  FileText,
+  BookOpen
 } from 'lucide-react';
 
 const navigation = [
   { name: 'Apartments', href: '/apartments', icon: Home },
+  { name: 'Blog', href: '/blog', icon: BookOpen },
   { name: 'Bookings', href: '/bookings', icon: Calendar },
   { name: 'Requests', href: '/requests', icon: FileText },
   { name: 'Messages', href: '/messages', icon: MessageSquare },
@@ -278,4 +280,3 @@ export default function Sidebar() {
     </>
   );
 }
-
