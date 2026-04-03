@@ -7,9 +7,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useSidebar } from '@/contexts/SidebarContext';
 import Sidebar from '@/components/Sidebar';
 import { TApartments } from '@/lib/types/airbnb';
-import { getSingleApartmentUserDetails, getEveryApartments, paymentHistory } from '@/lib/endpoints';
+import { getSingleApartmentUserDetails, getEveryApartments, paymentHistory, calculateReservationPrice } from '@/lib/endpoints';
 import { numberWithCommas } from '@/lib/utils';
-import { usePrice } from '@/lib/utils/price';
+import { getPrice } from '@/lib/utils/price';
 import axios from 'axios';
 import { 
   ArrowLeft, Calendar, MapPin, Bed, Bath, Users, Building2,
@@ -29,10 +29,14 @@ function PaymentSummaryContent() {
   const checkInDate = searchParams?.get('checkInDate') || '';
   const checkOutDate = searchParams?.get('checkOutDate') || '';
   const numberOfNightsParam = searchParams?.get('numberOfNights');
+  const fromRequestResponse = searchParams?.get('fromRequestResponse') === 'true';
+  const requestId = searchParams?.get('requestId') || '';
+  const requestResponseId = searchParams?.get('requestResponseId') || '';
 
   const [apartment, setApartment] = useState<TApartments | null>(null);
   const [loading, setLoading] = useState(true);
   const [reservationData, setReservationData] = useState<any>(null);
+  const [requestPricingData, setRequestPricingData] = useState<any>(null);
   const [selectedBedrooms, setSelectedBedrooms] = useState<number | null>(
     selectedBedroomsParam ? parseInt(selectedBedroomsParam) : null
   );
@@ -45,10 +49,11 @@ function PaymentSummaryContent() {
     if (apartmentId) {
       fetchApartmentDetails();
     }
-    if (reservationId) {
+    // Only fetch reservation data if it's NOT a request response booking
+    if (reservationId && !fromRequestResponse) {
       fetchReservationData();
     }
-  }, [user, router, apartmentId, reservationId]);
+  }, [user, router, apartmentId, reservationId, fromRequestResponse]);
 
   const fetchApartmentDetails = async () => {
     try {
@@ -68,7 +73,11 @@ function PaymentSummaryContent() {
       }
 
       try {
-        const response = await axios.get(`${getSingleApartmentUserDetails}?apartmentId=${apartmentId}`, {
+        // Backend uses path parameter: /api/apartment/getSingleApartmentUser/:apartmentId
+        const endpointUrl = `${getSingleApartmentUserDetails}/${apartmentId}`;
+        console.log('📡 Fetching apartment from URL:', endpointUrl);
+        
+        const response = await axios.get(endpointUrl, {
           headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
@@ -77,14 +86,20 @@ function PaymentSummaryContent() {
           timeout: 15000
         });
 
-        if (response.data?.data || response.data?.apartment) {
-          const apt = response.data?.data || response.data?.apartment;
-          setApartment(apt);
+        console.log('📡 Apartment fetch response:', response.data);
+
+        // Backend returns: { apartment: {...} } or { data: {...} }
+        if (response.data?.apartment) {
+          setApartment(response.data.apartment);
+          setLoading(false);
+          return;
+        } else if (response.data?.data) {
+          setApartment(response.data.data);
           setLoading(false);
           return;
         }
-      } catch (error) {
-        console.log('Single apartment fetch failed, trying all apartments...');
+      } catch (error: any) {
+        console.log('⚠️ Single apartment fetch failed, trying all apartments...', error.response?.data || error.message);
       }
 
       const response = await axios.get(getEveryApartments, {
@@ -105,10 +120,20 @@ function PaymentSummaryContent() {
         apartments = response.data;
       }
 
-      const foundApartment = apartments.find(apt => apt._id === apartmentId);
+      // Try to find apartment by matching _id or id (handle both string and ObjectId formats)
+      const foundApartment = apartments.find(apt => {
+        const aptId = apt._id || (apt as any).id;
+        if (!aptId) return false;
+        // Convert both to strings for comparison
+        return String(aptId) === String(apartmentId);
+      });
+      
       if (foundApartment) {
+        console.log('✅ Found apartment in list:', foundApartment._id || (foundApartment as any).id);
         setApartment(foundApartment);
       } else {
+        console.error('❌ Apartment not found. Looking for:', apartmentId);
+        console.error('Available apartment IDs:', apartments.map(apt => apt._id || (apt as any).id).slice(0, 5));
         toast.error('Apartment not found');
         router.push('/apartments');
       }
@@ -156,6 +181,61 @@ function PaymentSummaryContent() {
     }
   };
 
+  // Fetch backend-calculated pricing for request-response bookings
+  useEffect(() => {
+    const fetchRequestPricing = async () => {
+      if (!fromRequestResponse || !apartmentId || !checkInDate || !checkOutDate || !user) return;
+
+      try {
+        let authToken = null;
+        if (typeof window !== 'undefined') {
+          try {
+            const userData = localStorage.getItem('user');
+            if (userData) {
+              const userObj = JSON.parse(userData);
+              authToken = userObj?.accessToken || userObj?.token;
+            }
+          } catch (error) {
+            console.error('Error parsing user data:', error);
+          }
+        }
+
+        const response = await fetch(calculateReservationPrice, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(authToken && { 'Authorization': `Bearer ${authToken}` })
+          },
+          body: JSON.stringify({
+            apartmentId,
+            checkInDate,
+            checkOutDate,
+            reservationType: reservationData?.reservationType || 'normal',
+            requestId
+          })
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data?.success && data?.data) {
+            setRequestPricingData(data.data);
+          }
+        }
+      } catch {
+        // Keep local fallback calculation if request-pricing call fails
+      }
+    };
+
+    fetchRequestPricing();
+  }, [fromRequestResponse, apartmentId, checkInDate, checkOutDate, user, reservationData?.reservationType, requestId]);
+
+  const backendPriceBreakdown = useMemo(() => {
+    if (fromRequestResponse) {
+      return requestPricingData?.priceBreakdown || null;
+    }
+    return reservationData?.priceBreakdown || null;
+  }, [fromRequestResponse, requestPricingData?.priceBreakdown, reservationData?.priceBreakdown]);
+
   // Get dates - prioritize route params, fallback to reservation data
   const finalCheckInDate = useMemo(() => {
     return checkInDate || reservationData?.checkInDate || reservationData?.priceBreakdown?.checkInDate;
@@ -183,13 +263,13 @@ function PaymentSummaryContent() {
     if (!apartment) return 0;
     // Use reservation type from reservation data or default to 'normal'
     const reservationType = reservationData?.reservationType || 'normal';
-    return usePrice(apartment, reservationType as any, selectedBedrooms);
+    return getPrice(apartment, reservationType as any, selectedBedrooms);
   }, [apartment, reservationData?.reservationType, selectedBedrooms]);
 
   // Get seasonal pricing from API response
   const seasonalPricingInfo = useMemo(() => {
-    if (reservationData?.priceBreakdown?.seasonalPricing?.applied) {
-      const apiSeasonal = reservationData.priceBreakdown.seasonalPricing;
+    if (backendPriceBreakdown?.seasonalPricing?.applied) {
+      const apiSeasonal = backendPriceBreakdown.seasonalPricing;
       if (apiSeasonal.nightsWithSeasonal > 0 && apiSeasonal.additionalFeePerNight > 0) {
         const totalFee = apiSeasonal.nightsWithSeasonal * apiSeasonal.additionalFeePerNight;
         return {
@@ -204,12 +284,12 @@ function PaymentSummaryContent() {
       }
     }
     return { totalAdditionalFee: 0, applicablePricing: [] };
-  }, [reservationData?.priceBreakdown?.seasonalPricing]);
+  }, [backendPriceBreakdown?.seasonalPricing]);
 
   // Get discount info from API response
   const discountInfo = useMemo(() => {
-    if (reservationData?.priceBreakdown?.discount) {
-      const apiDiscount = reservationData.priceBreakdown.discount;
+    if (backendPriceBreakdown?.discount) {
+      const apiDiscount = backendPriceBreakdown.discount;
       if (apiDiscount.percent > 0) {
         return {
           percent: apiDiscount.percent,
@@ -219,14 +299,14 @@ function PaymentSummaryContent() {
       }
     }
     return null;
-  }, [reservationData?.priceBreakdown?.discount]);
+  }, [backendPriceBreakdown?.discount]);
 
-  const cautionFee = apartment?.cautionFee || 0;
+  const cautionFee = backendPriceBreakdown?.cautionFee ?? apartment?.cautionFee ?? 0;
   const subtotalBeforeDiscount = (basePrice * nights) + seasonalPricingInfo.totalAdditionalFee;
   const discountAmount = discountInfo?.amount || (discountInfo ? (subtotalBeforeDiscount * discountInfo.percent) / 100 : 0);
   const baseSubtotalAfterDiscount = (basePrice * nights) - discountAmount;
   const subtotal = baseSubtotalAfterDiscount + seasonalPricingInfo.totalAdditionalFee;
-  const total = subtotal + cautionFee;
+  const total = backendPriceBreakdown?.totalAmount ?? (subtotal + cautionFee);
 
   // Get bedroom configuration name
   const bedroomConfigName = useMemo(() => {
@@ -253,23 +333,57 @@ function PaymentSummaryContent() {
   };
 
   const handleProceedToPayment = () => {
-    if (!apartment || !reservationId) {
+    if (!apartment) {
       toast.error('Missing required information');
       return;
     }
 
+    // For request response bookings, we need requestId, requestResponseId, and apartmentId
+    // For regular reservations, we need reservationId
+    if (fromRequestResponse) {
+      if (!requestId || !requestResponseId || !apartmentId) {
+        toast.error('Missing required booking information');
+        return;
+      }
+    } else {
+      if (!reservationId) {
+        toast.error('Missing reservation information');
+        return;
+      }
+    }
+
     const params = new URLSearchParams();
-    params.set('reservationId', reservationId);
-    if (selectedBedrooms !== null) {
-      params.set('selectedBedrooms', selectedBedrooms.toString());
+    
+    if (fromRequestResponse) {
+      // Pass request response parameters - match mobile app navigation params
+      params.set('fromRequestResponse', 'true');
+      params.set('requestId', requestId);
+      params.set('requestResponseId', requestResponseId);
+      if (selectedBedrooms !== null) {
+        params.set('selectedBedrooms', selectedBedrooms.toString());
+      }
+      // Pass dates and numberOfNights for request response bookings (match mobile app)
+      if (finalCheckInDate) {
+        params.set('checkInDate', finalCheckInDate);
+      }
+      if (finalCheckOutDate) {
+        params.set('checkOutDate', finalCheckOutDate);
+      }
+      params.set('numberOfNights', nights.toString());
+    } else {
+      // Pass regular reservation parameters
+      params.set('reservationId', reservationId);
+      if (selectedBedrooms !== null) {
+        params.set('selectedBedrooms', selectedBedrooms.toString());
+      }
+      if (finalCheckInDate) {
+        params.set('checkInDate', finalCheckInDate);
+      }
+      if (finalCheckOutDate) {
+        params.set('checkOutDate', finalCheckOutDate);
+      }
+      params.set('numberOfNights', nights.toString());
     }
-    if (finalCheckInDate) {
-      params.set('checkInDate', finalCheckInDate);
-    }
-    if (finalCheckOutDate) {
-      params.set('checkOutDate', finalCheckOutDate);
-    }
-    params.set('numberOfNights', nights.toString());
     
     router.push(`/apartments/${apartmentId}/book?${params.toString()}`);
   };
@@ -310,7 +424,7 @@ function PaymentSummaryContent() {
     ? (typeof apartment.media.images[0] === 'string' 
         ? apartment.media.images[0] 
         : apartment.media.images[0]?.uri || apartment.media.images[0]?.url || '')
-    : 'https://via.placeholder.com/500x380';
+    : 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTAwIiBoZWlnaHQ9IjM4MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNTAwIiBoZWlnaHQ9IjM4MCIgZmlsbD0iI2YzZjRmNiIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMjAiIGZpbGw9IiM5Y2EzYWYiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5ObyBJbWFnZTwvdGV4dD48L3N2Zz4=';
 
   return (
     <div className="flex min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -431,6 +545,27 @@ function PaymentSummaryContent() {
                 </div>
               )}
 
+              {!!backendPriceBreakdown?.commission && backendPriceBreakdown.commission > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600 dark:text-gray-400">Agent Commission</span>
+                  <span className="font-medium text-gray-900 dark:text-white">₦{numberWithCommas(Math.round(backendPriceBreakdown.commission))}</span>
+                </div>
+              )}
+
+              {!!backendPriceBreakdown?.africartzServiceFee && backendPriceBreakdown.africartzServiceFee > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600 dark:text-gray-400">Service Fee</span>
+                  <span className="font-medium text-gray-900 dark:text-white">₦{numberWithCommas(Math.round(backendPriceBreakdown.africartzServiceFee))}</span>
+                </div>
+              )}
+
+              {!!backendPriceBreakdown?.paystackFee && backendPriceBreakdown.paystackFee > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600 dark:text-gray-400">Payment Processing Fee</span>
+                  <span className="font-medium text-gray-900 dark:text-white">₦{numberWithCommas(Math.round(backendPriceBreakdown.paystackFee))}</span>
+                </div>
+              )}
+
               {/* Caution Fee */}
               {cautionFee > 0 && (
                 <div className="flex justify-between text-sm pt-2 border-t border-gray-200 dark:border-gray-700">
@@ -477,4 +612,3 @@ export default function PaymentSummaryPage() {
     </Suspense>
   );
 }
-

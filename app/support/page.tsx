@@ -101,7 +101,7 @@ export default function SupportPage() {
               <span className="text-white text-4xl sm:text-5xl font-bold">A</span>
             </div>
             <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white text-center mb-2">
-              We're Here to Help
+              We&apos;re Here to Help
             </h2>
             <p className="text-base sm:text-lg text-gray-600 dark:text-gray-400 text-center max-w-md">
               Get in touch with our support team for any assistance you need

@@ -22,6 +22,8 @@ export const userProfile = endpoint2("auth/user-profile");
 export const forgotPassword = endpoint2("auth/user/forgot-password");
 export const resetPassword = endpoint2("auth/user/reset-password-otp"); 
 export const deleteAccount = endpoint2("auth/user/delete-account");
+export const requestEmailVerification = endpoint2("auth/user/verify-email/request");
+export const verifyEmailVerification = endpoint2("auth/user/verify-email");
 
 // Primary apartment endpoint
 export const getEveryApartments = endpoint2("apartment/approved-apartments");
@@ -36,12 +38,19 @@ export const sendReservation = endpoint2("reservations/request");
 export const sendInspection = endpoint2("inspections/request"); 
 export const inspectionRequest = endpoint2("inspections/request"); 
 export const postPayment = endpoint2("payments/initiate")
+export const calculateReservationPrice = endpoint2("reservations/calculate-price");
 export const cancelReservation = (reservationId: string) => endpoint2(`reservations/${reservationId}/cancel`);
 export const bookingHistory = endpoint("apartment/booking/history");
 export const userBookingHistory = (page = 1, limit = 10, status = "booked,completed", startDate = "2024-01-01", endDate = "2024-12-31") => 
   `${baseUrl2}/bookings/user/history?page=${page}&limit=${limit}&status=${status}&startDate=${startDate}&endDate=${endDate}`;
 export const ViewUserBookingHistory = (bookingId: string) => endpoint2(`bookings/user/${bookingId}`);
 export const bookAndPay = (reservationId: string) => endpoint2(`bookings/${reservationId}/book-and-pay`); 
+export const extendBookingPreview = (bookingId: string, newCheckOutDate: string) =>
+  endpoint2(`bookings/${bookingId}/extend/preview?newCheckOutDate=${encodeURIComponent(newCheckOutDate)}`);
+export const extendBooking = (bookingId: string) => endpoint2(`bookings/${bookingId}/extend`);
+export const requestExtension = (bookingId: string) => endpoint2(`bookings/${bookingId}/extend/request`);
+export const getExtensionRequest = (bookingId: string) => endpoint2(`bookings/${bookingId}/extend/request`);
+export const verifyPaymentByReference = (reference: string) => endpoint2(`payments/verify/${reference}`);
 
 export const sentExpoToken = endpoint2("notifications/save-expo-token");
 export const getAllNotification = (userId: string) => endpoint2(`notifications/all?userId=${userId}`);
@@ -69,3 +78,12 @@ export const sendChatMessage = (chatId: string) => endpoint2(`chat/${chatId}/mes
 export const markChatAsRead = (chatId: string) => endpoint2(`chat/${chatId}/read`);
 export const closeChat = (chatId: string) => endpoint2(`chat/${chatId}/close`);
 
+// Request endpoints
+export const createUserRequest = endpoint2("user/request/create");
+export const getUserRequests = (status?: string, page = 1, limit = 10) => 
+  endpoint2(`user/request/my-requests?page=${page}&limit=${limit}${status ? `&status=${status}` : ''}`);
+export const getRequestResponses = (requestId: string) => endpoint2(`user/request/${requestId}/responses`);
+export const closeUserRequest = (requestId: string) => endpoint2(`user/request/${requestId}/close`);
+export const deleteUserRequest = (requestId: string) => endpoint2(`user/request/${requestId}`);
+export const bookFromRequestResponse = (requestId: string, requestResponseId: string, apartmentId: string) => 
+	endpoint2(`bookings/request/${requestId}/response/${requestResponseId}/apartment/${apartmentId}/book`);

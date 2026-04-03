@@ -19,12 +19,18 @@ import {
   ChevronLeft,
   ChevronRight,
   Sun,
-  Moon
+  Moon,
+  Smartphone,
+  ExternalLink,
+  FileText,
+  BookOpen
 } from 'lucide-react';
 
 const navigation = [
   { name: 'Apartments', href: '/apartments', icon: Home },
+  { name: 'Blog', href: '/blog', icon: BookOpen },
   { name: 'Bookings', href: '/bookings', icon: Calendar },
+  { name: 'Requests', href: '/requests', icon: FileText },
   { name: 'Messages', href: '/messages', icon: MessageSquare },
   { name: 'Notifications', href: '/notifications', icon: Bell },
   { name: 'Profile', href: '/profile', icon: User },
@@ -75,7 +81,7 @@ export default function Sidebar() {
           fixed top-0 left-0 h-full bg-white dark:bg-gray-900 shadow-lg dark:shadow-gray-950 z-40 transform transition-all duration-300 ease-in-out
           ${isOpen ? 'translate-x-0' : '-translate-x-full'}
           lg:translate-x-0
-          ${mounted && isCollapsed ? 'w-20' : 'w-64'}
+          w-64 ${mounted ? (isCollapsed ? 'lg:w-20' : 'lg:w-64') : 'lg:w-64'}
         `}
         suppressHydrationWarning
       >
@@ -188,6 +194,38 @@ export default function Sidebar() {
             </ul>
           </nav>
 
+          {/* Mobile App Promotion */}
+          <div className={`p-4 border-t border-gray-200 dark:border-gray-700 ${isCollapsed ? 'px-2' : ''}`}>
+            <a
+              href="https://apps.apple.com/ng/app/afribooking-find-book/id6476979170"
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => setIsOpen(false)}
+              className={`
+                w-full flex items-center rounded-lg transition-colors
+                ${isCollapsed 
+                  ? 'justify-center px-3 py-3' 
+                  : 'space-x-3 px-4 py-3'
+                }
+                bg-gradient-to-r from-primary/10 to-primary/5 dark:from-primary/20 dark:to-primary/10
+                border border-primary/20 dark:border-primary/30
+                text-primary hover:from-primary/20 hover:to-primary/10 dark:hover:from-primary/30 dark:hover:to-primary/20
+              `}
+              title={isCollapsed ? 'Download Mobile App' : undefined}
+            >
+              <Smartphone size={20} className="flex-shrink-0" />
+              {!isCollapsed && (
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1">
+                    <span className="font-medium text-xs">Mobile App</span>
+                    <ExternalLink size={14} className="flex-shrink-0" />
+                  </div>
+                  <span className="text-xs text-primary/80 dark:text-primary/70">Download now</span>
+                </div>
+              )}
+            </a>
+          </div>
+
           {/* Theme Toggle */}
           <div className={`p-4 border-t border-gray-200 dark:border-gray-700 ${isCollapsed ? 'px-2' : ''}`}>
             <button
@@ -242,4 +280,3 @@ export default function Sidebar() {
     </>
   );
 }
-

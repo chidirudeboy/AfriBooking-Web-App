@@ -42,7 +42,10 @@ api.interceptors.response.use(
       // Clear user data and redirect to login
       if (typeof window !== 'undefined') {
         localStorage.removeItem('user');
-        window.location.href = '/login';
+        // Use router if available, otherwise use window.location
+        if (window.location.pathname !== '/login') {
+          window.location.href = '/login';
+        }
       }
     }
     return Promise.reject(error);

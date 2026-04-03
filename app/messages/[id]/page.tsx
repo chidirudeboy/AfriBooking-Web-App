@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useSidebar } from '@/contexts/SidebarContext';
 import Sidebar from '@/components/Sidebar';
 import { getChatMessages, sendChatMessage, markChatAsRead, getUserChats } from '@/lib/endpoints';
+import { containsBlockedContactDetails, BLOCKED_MESSAGE } from '@/lib/utils/chatContentCheck';
 import axios from 'axios';
 import { ArrowLeft, Send, RefreshCw, MessageSquare } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -310,6 +311,12 @@ export default function ChatDetailPage() {
     if (!messageText.trim() || !chatId || sending) return;
 
     const textToSend = messageText.trim();
+
+    if (containsBlockedContactDetails(textToSend)) {
+      toast.error(BLOCKED_MESSAGE);
+      return;
+    }
+
     setMessageText('');
     setSending(true);
 
@@ -639,4 +646,3 @@ export default function ChatDetailPage() {
     </div>
   );
 }
-

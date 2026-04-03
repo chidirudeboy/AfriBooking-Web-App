@@ -30,8 +30,13 @@ yarn-error.log*
 
 # vercel
 .vercel
+GITHUB_ACTIONS_VERCEL.md
+PRIVATE_README.md
+README.private.md
+DEPLOYMENT.private.md
+CONFIG.private.md
+*.private.*
 
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-

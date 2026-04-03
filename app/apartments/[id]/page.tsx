@@ -1,20 +1,21 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Image from 'next/image';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSidebar } from '@/contexts/SidebarContext';
 import Sidebar from '@/components/Sidebar';
 import { TApartments, TOptionalFees } from '@/lib/types/airbnb';
-import { getEveryApartments, getSingleApartmentUserDetails, paymentHistory } from '@/lib/endpoints';
+import { getEveryApartments, getSingleApartmentUserDetails, paymentHistory, cancelReservation } from '@/lib/endpoints';
 import { numberWithCommas } from '@/lib/utils';
-import { usePrice } from '@/lib/utils/price';
+import { getPrice } from '@/lib/utils/price';
 import axios from 'axios';
 import { 
   MapPin, Bed, Bath, Users, ChevronLeft, ChevronRight, 
-  CheckCircle, Copy, ArrowLeft, Calendar, Shield, Building2
+  CheckCircle, Copy, ArrowLeft, Calendar, Shield, Building2, Play
 } from 'lucide-react';
+import MediaModal from '@/components/MediaModal';
 import toast from 'react-hot-toast';
 
 export default function ApartmentDetailsPage() {
@@ -28,12 +29,17 @@ export default function ApartmentDetailsPage() {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [reservationType, setReservationType] = useState<string>('normal');
   const [selectedBedrooms, setSelectedBedrooms] = useState<number | null>(null);
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
+  const [isMediaModalOpen, setIsMediaModalOpen] = useState(false);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
   const [showBedroomDropdown, setShowBedroomDropdown] = useState(false);
   const [reservationStatus, setReservationStatus] = useState<string | null>(null);
   const [reservationId, setReservationId] = useState<string | null>(null);
   const [hasCheckedReservation, setHasCheckedReservation] = useState(false);
   const [acceptedReservationBedrooms, setAcceptedReservationBedrooms] = useState<number | null>(null);
   const [paymentHistoryData, setPaymentHistoryData] = useState<any>(null);
+  const [isReservationPending, setIsReservationPending] = useState<boolean>(false);
+  const [isCancelling, setIsCancelling] = useState<boolean>(false);
 
   useEffect(() => {
     // Allow viewing apartment details without login (matching mobile app behavior)
@@ -115,6 +121,8 @@ export default function ApartmentDetailsPage() {
         setReservationStatus(null);
         setReservationId(null);
         setPaymentHistoryData(null);
+        setIsReservationPending(false);
+        setAcceptedReservationBedrooms(null);
         setHasCheckedReservation(true);
         return;
       }
@@ -127,6 +135,7 @@ export default function ApartmentDetailsPage() {
         
         // Store reservation status regardless of status
         setReservationStatus(parsed.status);
+        updateReservationPendingState(parsed.status);
         console.log('Set reservation status to:', parsed.status);
         
         // If reservationId is missing, try to find it from user's reservations
@@ -247,6 +256,12 @@ export default function ApartmentDetailsPage() {
     return null;
   };
 
+  // Update reservation pending state based on status (matching mobile app)
+  const updateReservationPendingState = (status: string | null) => {
+    const pendingStates = ['pending', 'accepted']; // Both pending and accepted should show cancel button
+    setIsReservationPending(status ? pendingStates.includes(status) : false);
+  };
+
   const fetchCurrentReservationStatus = async (reservationId: string) => {
     try {
       let authToken = null;
@@ -288,6 +303,7 @@ export default function ApartmentDetailsPage() {
           if (backendStatus) {
             const oldStatus = reservationStatus;
             setReservationStatus(backendStatus);
+            updateReservationPendingState(backendStatus);
             
             // Update localStorage
             const reservationKey = `reservation_${apartmentId}`;
@@ -315,6 +331,92 @@ export default function ApartmentDetailsPage() {
       }
     } catch (error) {
       console.error('Error fetching reservation status:', error);
+    }
+  };
+
+  const handleCancelReservation = async () => {
+    if (!reservationId) {
+      toast.error('Reservation ID not found');
+      return;
+    }
+
+    if (!user) {
+      toast.error('Please log in to cancel reservation');
+      return;
+    }
+
+    // Get userId from user object (matching mobile app structure)
+    const userId = user.user?._id || user._id || user.id;
+    if (!userId) {
+      toast.error('User ID not found. Please log in again.');
+      return;
+    }
+
+    if (!confirm('Are you sure you want to cancel this reservation?')) {
+      return;
+    }
+
+    setIsCancelling(true);
+    try {
+      let authToken = null;
+      if (typeof window !== 'undefined') {
+        try {
+          const userData = localStorage.getItem('user');
+          if (userData) {
+            const userObj = JSON.parse(userData);
+            authToken = userObj?.accessToken || userObj?.token;
+          }
+        } catch (error) {
+          console.error('Error parsing user data:', error);
+        }
+      }
+
+      if (!authToken) {
+        toast.error('Please log in to cancel reservation');
+        setIsCancelling(false);
+        return;
+      }
+
+      // Include userId in request body (matching mobile app behavior)
+      const response = await axios.delete(cancelReservation(reservationId), {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        data: {
+          userId: userId
+        }
+      });
+
+      if (response.data?.success || response.status === 200 || response.status === 204) {
+        toast.success('Reservation cancelled successfully');
+        
+        // Clear reservation data
+        const reservationKey = `reservation_${apartmentId}`;
+        localStorage.removeItem(reservationKey);
+        
+        // Reset states
+        setIsReservationPending(false);
+        setReservationId(null);
+        setReservationStatus(null);
+        setPaymentHistoryData(null);
+        setAcceptedReservationBedrooms(null);
+        
+        // Reset selectedBedrooms if it was locked
+        if (apartment?.bedroomPricing && apartment.bedroomPricing.length > 0) {
+          const firstBedroom = apartment.bedroomPricing[0];
+          setSelectedBedrooms(firstBedroom.bedrooms);
+        } else {
+          setSelectedBedrooms(null);
+        }
+      } else {
+        toast.error(response.data?.message || 'Failed to cancel reservation');
+      }
+    } catch (error: any) {
+      console.error('Error cancelling reservation:', error);
+      toast.error(error.response?.data?.message || 'Failed to cancel reservation. Please try again.');
+    } finally {
+      setIsCancelling(false);
     }
   };
 
@@ -503,12 +605,12 @@ export default function ApartmentDetailsPage() {
     options.push({
       bedrooms: null,
       label: `${apartment.bedrooms} Bedrooms (Full Apartment)`,
-      price: usePrice(apartment, reservationType as any, null)
+      price: getPrice(apartment, reservationType as any, null)
     });
     
     // Add bedroom pricing options
     availableBedroomConfigs.forEach(config => {
-      const configPrice = usePrice(apartment, reservationType as any, config.bedrooms);
+      const configPrice = getPrice(apartment, reservationType as any, config.bedrooms);
       options.push({
         bedrooms: config.bedrooms,
         label: `${config.bedrooms} ${config.bedrooms === 1 ? 'Bedroom' : 'Bedrooms'}`,
@@ -534,7 +636,7 @@ export default function ApartmentDetailsPage() {
   // Calculate price
   const price = useMemo(() => {
     if (!apartment) return 0;
-    return usePrice(apartment, reservationType as any, selectedBedrooms);
+    return getPrice(apartment, reservationType as any, selectedBedrooms);
   }, [apartment, reservationType, selectedBedrooms]);
 
   // Parse amenities
@@ -572,26 +674,66 @@ export default function ApartmentDetailsPage() {
     return [];
   }, [apartment?.amenities]);
 
-  // Get media items (images)
+  // Get media items (images and videos) - matching mobile app structure
   const mediaItems = useMemo(() => {
-    if (!apartment?.media?.images) return [];
-    return apartment.media.images.map((image: any) => {
-      if (typeof image === 'string') return image;
-      return image?.uri || image?.url || '';
-    }).filter(Boolean);
-  }, [apartment?.media?.images]);
+    const items: Array<{ type: 'image' | 'video'; uri: string }> = [];
+    
+    // Add images
+    if (apartment?.media?.images) {
+      apartment.media.images.forEach((image: any) => {
+        const imageUri = typeof image === 'string' ? image : (image?.uri || image?.url || '');
+        if (imageUri) {
+          items.push({ type: 'image', uri: imageUri });
+        }
+      });
+    }
+    
+    // Add videos - matching mobile app structure
+    if (apartment?.media?.videos) {
+      apartment.media.videos.forEach((video: any) => {
+        let videoUri = '';
+        if (typeof video === 'string') {
+          videoUri = video;
+        } else if (video && typeof video === 'object') {
+          videoUri = video.fullPath || video.url || video.uri || '';
+        }
+        if (videoUri) {
+          items.push({ type: 'video', uri: videoUri });
+        }
+      });
+    }
+    
+    // Also check for videos at root level (fallback)
+    if (apartment?.videos && Array.isArray(apartment.videos)) {
+      apartment.videos.forEach((video: any) => {
+        const videoUri = typeof video === 'string' ? video : (video?.fullPath || video?.url || video?.uri || '');
+        if (videoUri && !items.some(item => item.type === 'video' && item.uri === videoUri)) {
+          items.push({ type: 'video', uri: videoUri });
+        }
+      });
+    }
+    
+    return items;
+  }, [apartment?.media?.images, apartment?.media?.videos, apartment?.videos]);
 
   const handlePreviousImage = () => {
+    setIsVideoPlaying(false);
     setCurrentImageIndex((prev) => 
       prev === 0 ? mediaItems.length - 1 : prev - 1
     );
   };
 
   const handleNextImage = () => {
+    setIsVideoPlaying(false);
     setCurrentImageIndex((prev) => 
       prev === mediaItems.length - 1 ? 0 : prev + 1
     );
   };
+
+  // Pause video when switching media
+  useEffect(() => {
+    setIsVideoPlaying(false);
+  }, [currentImageIndex]);
 
   const handleCopyLink = async () => {
     if (apartment?.webLink) {
@@ -636,14 +778,16 @@ export default function ApartmentDetailsPage() {
     );
   }
 
-  const currentImage = mediaItems[currentImageIndex] || 'https://via.placeholder.com/800x600';
+  // Fallback image as data URI to avoid external network calls
+  const fallbackImage = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAwIiBoZWlnaHQ9IjYwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iODAwIiBoZWlnaHQ9IjYwMCIgZmlsbD0iI2YzZjRmNiIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMjQiIGZpbGw9IiM5Y2EzYWYiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5ObyBJbWFnZTwvdGV4dD48L3N2Zz4=';
+  const currentMedia = mediaItems[currentImageIndex] || { type: 'image', uri: fallbackImage };
 
   return (
-    <div className="flex min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="flex min-h-screen bg-gray-50 dark:bg-gray-900 overflow-x-hidden">
       <Sidebar />
       
-      <div className={`flex-1 transition-all duration-300 ${isCollapsed ? 'lg:ml-20' : 'lg:ml-64'}`}>
-        <main className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8 py-4 sm:py-6">
+      <div className={`flex-1 transition-all duration-300 ${isCollapsed ? 'lg:ml-20' : 'lg:ml-64'} w-0 min-w-0`}>
+        <main className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8 py-4 sm:py-6 w-full overflow-x-hidden">
           {/* Back Button */}
           <button
             onClick={() => router.back()}
@@ -653,50 +797,95 @@ export default function ApartmentDetailsPage() {
             Back
           </button>
 
-          {/* Image Carousel */}
+          {/* Media Carousel (Images and Videos) */}
           <div className="relative w-full h-64 sm:h-80 md:h-96 lg:h-[500px] rounded-lg overflow-hidden mb-4 sm:mb-6 bg-gray-200 dark:bg-gray-700">
             {mediaItems.length > 0 ? (
               <>
-                <Image
-                  src={currentImage}
-                  alt={apartment.apartmentName}
-                  fill
-                  className="object-cover"
-                  priority
-                />
-                    {mediaItems.length > 1 && (
-                      <>
-                        <button
-                          onClick={handlePreviousImage}
-                          className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 bg-white/80 dark:bg-gray-800/80 hover:bg-white dark:hover:bg-gray-800 rounded-full p-1.5 sm:p-2 shadow-lg"
-                        >
-                          <ChevronLeft size={20} className="sm:w-6 sm:h-6 text-gray-900 dark:text-white" />
-                        </button>
-                        <button
-                          onClick={handleNextImage}
-                          className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 bg-white/80 dark:bg-gray-800/80 hover:bg-white dark:hover:bg-gray-800 rounded-full p-1.5 sm:p-2 shadow-lg"
-                        >
-                          <ChevronRight size={20} className="sm:w-6 sm:h-6 text-gray-900 dark:text-white" />
-                        </button>
-                        <div className="absolute bottom-2 sm:bottom-4 left-1/2 -translate-x-1/2 flex space-x-1.5 sm:space-x-2">
-                          {mediaItems.map((_, index) => (
-                            <button
-                              key={index}
-                              onClick={() => setCurrentImageIndex(index)}
-                              className={`h-1.5 sm:h-2 rounded-full transition-all ${
-                                index === currentImageIndex
-                                  ? 'w-6 sm:w-8 bg-white'
-                                  : 'w-1.5 sm:w-2 bg-white/50'
-                              }`}
-                            />
-                          ))}
+                <button
+                  onClick={() => setIsMediaModalOpen(true)}
+                  className="absolute inset-0 w-full h-full z-0 focus:outline-none"
+                  aria-label="Open media in fullscreen"
+                >
+                  {currentMedia.type === 'video' ? (
+                    <div className="relative w-full h-full">
+                      <video
+                        ref={videoRef}
+                        src={currentMedia.uri}
+                        className="w-full h-full object-cover pointer-events-none"
+                        controls={isVideoPlaying}
+                        autoPlay={isVideoPlaying}
+                        loop
+                        playsInline
+                        onPlay={() => setIsVideoPlaying(true)}
+                        onPause={() => setIsVideoPlaying(false)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setIsMediaModalOpen(true);
+                        }}
+                      />
+                      {!isVideoPlaying && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/30 pointer-events-none">
+                          <div className="bg-white/90 dark:bg-gray-800/90 rounded-full p-4 sm:p-6 shadow-lg">
+                            <Play className="w-12 h-12 sm:w-16 sm:h-16 text-gray-900 dark:text-white fill-current" />
+                          </div>
                         </div>
-                      </>
-                    )}
+                      )}
+                    </div>
+                  ) : (
+                    <Image
+                      src={currentMedia.uri}
+                      alt={apartment.apartmentName}
+                      fill
+                      className="object-cover cursor-pointer"
+                      priority
+                    />
+                  )}
+                </button>
+                {mediaItems.length > 1 && (
+                  <>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handlePreviousImage();
+                      }}
+                      className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 bg-white/80 dark:bg-gray-800/80 hover:bg-white dark:hover:bg-gray-800 rounded-full p-2.5 sm:p-2 shadow-lg z-20 min-w-[44px] min-h-[44px] flex items-center justify-center touch-manipulation"
+                      aria-label="Previous image"
+                    >
+                      <ChevronLeft size={20} className="sm:w-6 sm:h-6 text-gray-900 dark:text-white" />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleNextImage();
+                      }}
+                      className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 bg-white/80 dark:bg-gray-800/80 hover:bg-white dark:hover:bg-gray-800 rounded-full p-2.5 sm:p-2 shadow-lg z-20 min-w-[44px] min-h-[44px] flex items-center justify-center touch-manipulation"
+                      aria-label="Next image"
+                    >
+                      <ChevronRight size={20} className="sm:w-6 sm:h-6 text-gray-900 dark:text-white" />
+                    </button>
+                    <div className="absolute bottom-2 sm:bottom-4 left-1/2 -translate-x-1/2 flex space-x-1.5 sm:space-x-2 z-20">
+                      {mediaItems.map((_, index) => (
+                        <button
+                          key={index}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setCurrentImageIndex(index);
+                          }}
+                          className={`h-2 sm:h-2.5 rounded-full transition-all touch-manipulation min-w-[24px] ${
+                            index === currentImageIndex
+                              ? 'w-8 sm:w-10 bg-white'
+                              : 'w-2 sm:w-2.5 bg-white/50'
+                          }`}
+                          aria-label={`Go to image ${index + 1}`}
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
               </>
             ) : (
               <div className="w-full h-full flex items-center justify-center bg-gray-200 dark:bg-gray-700">
-                <p className="text-gray-500 dark:text-gray-400">No images available</p>
+                <p className="text-gray-500 dark:text-gray-400">No media available</p>
               </div>
             )}
           </div>
@@ -704,7 +893,7 @@ export default function ApartmentDetailsPage() {
           {/* Thumbnail Gallery */}
           {mediaItems.length > 1 && (
             <div className="flex space-x-2 mb-4 sm:mb-6 overflow-x-auto pb-2 -mx-3 sm:mx-0 px-3 sm:px-0">
-              {mediaItems.map((image, index) => (
+              {mediaItems.map((mediaItem, index) => (
                 <button
                   key={index}
                   onClick={() => setCurrentImageIndex(index)}
@@ -714,20 +903,40 @@ export default function ApartmentDetailsPage() {
                       : 'border-transparent'
                   }`}
                 >
-                  <Image
-                    src={image}
-                    alt={`Thumbnail ${index + 1}`}
-                    fill
-                    className="object-cover"
-                  />
+                  {mediaItem.type === 'video' ? (
+                    <>
+                      <video
+                        src={mediaItem.uri}
+                        className="w-full h-full object-cover"
+                        muted
+                        playsInline
+                      />
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                        <svg
+                          className="w-6 h-6 sm:w-8 sm:h-8 text-white"
+                          fill="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path d="M8 5v14l11-7z" />
+                        </svg>
+                      </div>
+                    </>
+                  ) : (
+                    <Image
+                      src={mediaItem.uri}
+                      alt={`Thumbnail ${index + 1}`}
+                      fill
+                      className="object-cover"
+                    />
+                  )}
                 </button>
               ))}
             </div>
           )}
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 w-full">
             {/* Main Content */}
-            <div className="lg:col-span-2">
+            <div className="lg:col-span-2 w-full min-w-0">
               {/* Header */}
               <div className="mb-4 sm:mb-6">
                 <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-2">
@@ -775,7 +984,7 @@ export default function ApartmentDetailsPage() {
 
               {/* Bedroom Selection */}
               {(availableBedroomConfigs.length > 0 || apartment.bedrooms) && (
-                <div className="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 mb-4 sm:mb-6 shadow-sm border border-gray-200 dark:border-gray-700">
+                <div className="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 mb-4 sm:mb-6 shadow-sm border border-gray-200 dark:border-gray-700 w-full overflow-visible">
                   <div className="flex items-center mb-3 sm:mb-4">
                     <Bed size={18} className="sm:w-5 sm:h-5 mr-2 text-gray-600 dark:text-gray-400" />
                     <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
@@ -784,25 +993,25 @@ export default function ApartmentDetailsPage() {
                   </div>
                   
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                    Choose how many bedrooms you'd like to book:
+                    Choose how many bedrooms you&apos;d like to book:
                   </p>
 
-                  <div className="relative">
+                  <div className="relative w-full">
                     <button
                       onClick={() => setShowBedroomDropdown(!showBedroomDropdown)}
                       className="w-full flex items-center justify-between p-4 border-2 border-gray-300 dark:border-gray-600 rounded-lg hover:border-primary dark:hover:border-primary transition-colors bg-white dark:bg-gray-800"
                     >
-                      <div className="flex items-center flex-1">
-                        <Bed size={20} className="mr-3 text-gray-600 dark:text-gray-400" />
-                        <div className="text-left">
-                          <p className="font-semibold text-gray-900 dark:text-white">
+                      <div className="flex items-center flex-1 min-w-0">
+                        <Bed size={20} className="mr-3 text-gray-600 dark:text-gray-400 flex-shrink-0" />
+                        <div className="text-left min-w-0 flex-1">
+                          <p className="font-semibold text-gray-900 dark:text-white truncate">
                             {selectedBedrooms !== null
                               ? getBedroomOptions.find(opt => opt.bedrooms === selectedBedrooms)?.label.replace(' (Full Apartment)', '') || 
                                 `${selectedBedrooms} ${selectedBedrooms === 1 ? 'Bedroom' : 'Bedrooms'}`
                               : 'Select bedroom configuration'}
                           </p>
                           {selectedBedrooms !== null && (
-                            <p className="text-sm text-gray-600 dark:text-gray-400">
+                            <p className="text-sm text-gray-600 dark:text-gray-400 truncate">
                               ₦{numberWithCommas(price)} / night
                             </p>
                           )}
@@ -815,7 +1024,7 @@ export default function ApartmentDetailsPage() {
                     </button>
 
                     {showBedroomDropdown && getBedroomOptions.length > 0 && (
-                      <div className="absolute z-10 w-full mt-2 bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-700 rounded-lg shadow-lg dark:shadow-gray-900 max-h-80 overflow-y-auto">
+                      <div className="absolute z-10 w-full mt-2 bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-700 rounded-lg shadow-lg dark:shadow-gray-900 max-h-80 overflow-y-auto left-0 right-0 max-w-full">
                         {getBedroomOptions.map((option, index) => {
                           const isSelected = selectedBedrooms === option.bedrooms;
                           return (
@@ -829,22 +1038,22 @@ export default function ApartmentDetailsPage() {
                                 isSelected ? 'bg-primary/5 dark:bg-primary/10' : ''
                               }`}
                             >
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center flex-1">
-                                  <Building2 size={20} className="mr-3 text-gray-600 dark:text-gray-400" />
-                                  <div>
-                                    <p className="font-semibold text-gray-900 dark:text-white">
+                              <div className="flex items-center justify-between gap-2 min-w-0">
+                                <div className="flex items-center flex-1 min-w-0">
+                                  <Building2 size={20} className="mr-3 text-gray-600 dark:text-gray-400 flex-shrink-0" />
+                                  <div className="min-w-0 flex-1">
+                                    <p className="font-semibold text-gray-900 dark:text-white truncate">
                                       {option.label.replace(' (Full Apartment)', '')}
                                     </p>
-                                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                                    <p className="text-sm text-gray-600 dark:text-gray-400 truncate">
                                       {option.bedrooms !== null 
                                         ? `${option.bedrooms} ${option.bedrooms === 1 ? 'bedroom' : 'bedrooms'} available`
                                         : 'Complete apartment access'}
                                     </p>
                                   </div>
                                 </div>
-                                <div className="text-right">
-                                  <p className="font-bold text-gray-900 dark:text-white">
+                                <div className="text-right flex-shrink-0">
+                                  <p className="font-bold text-gray-900 dark:text-white whitespace-nowrap">
                                     ₦{numberWithCommas(option.price)}
                                   </p>
                                   <p className="text-xs text-gray-500 dark:text-gray-400">/night</p>
@@ -905,9 +1114,9 @@ export default function ApartmentDetailsPage() {
                     onClick={handleCopyLink}
                     className="w-full flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0 p-3 sm:p-4 bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-200 dark:border-blue-800 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
                   >
-                    <div className="flex-1 text-left min-w-0 w-full sm:w-auto">
+                    <div className="flex-1 text-left min-w-0 w-full sm:w-auto overflow-hidden">
                       <p className="text-sm sm:text-base font-medium text-blue-900 dark:text-blue-200 mb-1">Share this apartment</p>
-                      <p className="text-xs sm:text-sm text-blue-700 dark:text-blue-300 break-all sm:truncate">{apartment.webLink}</p>
+                      <p className="text-xs sm:text-sm text-blue-700 dark:text-blue-300 break-all sm:truncate overflow-hidden">{apartment.webLink}</p>
                     </div>
                     <Copy size={18} className="sm:w-5 sm:h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 sm:ml-4 self-end sm:self-auto" />
                   </button>
@@ -916,8 +1125,8 @@ export default function ApartmentDetailsPage() {
             </div>
 
             {/* Sidebar - Price & Booking */}
-            <div className="lg:col-span-1">
-              <div className="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 shadow-lg dark:shadow-gray-900 border border-gray-200 dark:border-gray-700 sticky top-4 sm:top-6">
+            <div className="lg:col-span-1 w-full min-w-0">
+              <div className="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 shadow-lg dark:shadow-gray-900 border border-gray-200 dark:border-gray-700 sticky top-4 sm:top-6 w-full">
                 {/* Reservation Type Selector */}
                 <div className="mb-4 sm:mb-6">
                   <label className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -957,7 +1166,32 @@ export default function ApartmentDetailsPage() {
                   </p>
                 </div>
 
-                {/* Show Book Now button if reservation is accepted */}
+                {/* Show Cancel Reservation button when reservation is pending (matching mobile app) */}
+                {hasCheckedReservation && isReservationPending && (
+                  <button
+                    onClick={handleCancelReservation}
+                    disabled={isCancelling}
+                    className={`w-full py-3 sm:py-4 rounded-lg font-semibold text-base sm:text-lg transition-opacity mb-4 shadow-lg ${
+                      reservationStatus === 'accepted'
+                        ? 'bg-gradient-to-r from-red-500 to-red-600 text-white hover:opacity-90'
+                        : 'bg-gradient-to-r from-red-500 to-red-600 text-white hover:opacity-90'
+                    } ${isCancelling ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    {isCancelling ? (
+                      <span className="flex items-center justify-center">
+                        <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Cancelling...
+                      </span>
+                    ) : (
+                      reservationStatus === 'accepted' ? 'Cancel Accepted Reservation' : 'Cancel Reservation Request'
+                    )}
+                  </button>
+                )}
+
+                {/* Show Book Now button if reservation is accepted (matching mobile app) */}
                 {hasCheckedReservation && reservationStatus === 'accepted' && reservationId && (
                   <button
                     onClick={handleBookNow}
@@ -967,8 +1201,8 @@ export default function ApartmentDetailsPage() {
                   </button>
                 )}
 
-                {/* Show Request Reservation button if no accepted reservation */}
-                {(!hasCheckedReservation || reservationStatus !== 'accepted') && (
+                {/* Show Request Reservation button only when no pending reservation (matching mobile app) */}
+                {hasCheckedReservation && !isReservationPending && (
                   <button
                     onClick={() => {
                       // Require login for reservation (matching mobile app behavior)
@@ -1049,7 +1283,14 @@ export default function ApartmentDetailsPage() {
           </div>
         </main>
       </div>
+
+      {/* Media Modal */}
+      <MediaModal
+        isOpen={isMediaModalOpen}
+        onClose={() => setIsMediaModalOpen(false)}
+        mediaItems={mediaItems}
+        initialIndex={currentImageIndex}
+      />
     </div>
   );
 }
-

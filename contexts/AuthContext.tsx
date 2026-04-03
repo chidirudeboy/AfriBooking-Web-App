@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/lib/utils/api';
-import { loginUser as loginEndpoint, userProfile, createAccount, updateProfile, deleteAccount } from '@/lib/endpoints';
+import { loginUser as loginEndpoint, userProfile, createAccount, updateProfile, deleteAccount, forgotPassword, resetPassword, requestEmailVerification } from '@/lib/endpoints';
 import toast from 'react-hot-toast';
 
 interface User {
@@ -21,23 +21,137 @@ interface AuthContextType {
   profile: any;
   loading: boolean;
   error: string | null;
+  showSessionWarning: boolean;
   loginUser: (email: string, password: string) => Promise<void>;
-  createAccount: (first_name: string, last_name: string, email: string, phone: string, password: string) => Promise<void>;
+  createAccount: (firstName: string, lastName: string, email: string, phoneNumber: string, password: string) => Promise<void>;
   logout: () => void;
   getProfile: () => Promise<void>;
   updateProfile: (first_name: string, last_name: string, email: string, phone: string) => Promise<void>;
   deleteAccount: (password: string) => Promise<void>;
+  forgotPassword: (email: string) => Promise<boolean>;
+  resetPassword: (email: string, otp: string, newPassword: string, confirmNewPassword: string) => Promise<boolean>;
+  extendSession: () => void;
   token: string | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+// Session timeout configuration (in milliseconds)
+const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutes of inactivity
+const SESSION_WARNING_TIME = 5 * 60 * 1000; // Show warning 5 minutes before timeout
+const TOKEN_CHECK_INTERVAL = 60 * 1000; // Check token every minute
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [lastActivity, setLastActivity] = useState<number>(Date.now());
+  const [showSessionWarning, setShowSessionWarning] = useState(false);
   const router = useRouter();
+
+  // Decode JWT token to check expiration
+  const decodeToken = (token: string): any => {
+    try {
+      const base64Url = token.split('.')[1];
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      const jsonPayload = decodeURIComponent(
+        atob(base64)
+          .split('')
+          .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+          .join('')
+      );
+      return JSON.parse(jsonPayload);
+    } catch (error) {
+      console.error('Error decoding token:', error);
+      return null;
+    }
+  };
+
+  // Check if token is expired
+  const isTokenExpired = (token: string | undefined): boolean => {
+    if (!token) return true;
+    
+    const decoded = decodeToken(token);
+    if (!decoded || !decoded.exp) return false; // If no exp claim, assume valid
+    
+    const expirationTime = decoded.exp * 1000; // Convert to milliseconds
+    const currentTime = Date.now();
+    return currentTime >= expirationTime;
+  };
+
+  // Track user activity
+  useEffect(() => {
+    if (!user) return;
+
+    const updateActivity = () => {
+      setLastActivity(Date.now());
+      if (showSessionWarning) {
+        setShowSessionWarning(false);
+      }
+    };
+
+    // Track mouse, keyboard, touch, and scroll events
+    const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click'];
+    events.forEach((event) => {
+      window.addEventListener(event, updateActivity, { passive: true });
+    });
+
+    return () => {
+      events.forEach((event) => {
+        window.removeEventListener(event, updateActivity);
+      });
+    };
+  }, [user, showSessionWarning]);
+
+  // Check session timeout and token expiration
+  useEffect(() => {
+    if (!user) return;
+
+    const checkSession = () => {
+      const now = Date.now();
+      const timeSinceActivity = now - lastActivity;
+      const timeUntilTimeout = SESSION_TIMEOUT - timeSinceActivity;
+
+      // Check token expiration
+      const token = user.accessToken || user.token;
+      if (token && isTokenExpired(token)) {
+        handleSessionExpired('Your session has expired. Please login again.');
+        return;
+      }
+
+      // Check inactivity timeout
+      if (timeSinceActivity >= SESSION_TIMEOUT) {
+        handleSessionExpired('Your session has expired due to inactivity. Please login again.');
+        return;
+      }
+
+      // Show warning before timeout
+      if (timeUntilTimeout <= SESSION_WARNING_TIME && timeUntilTimeout > 0 && !showSessionWarning) {
+        setShowSessionWarning(true);
+      }
+    };
+
+    // Check immediately and then at intervals
+    checkSession();
+    const interval = setInterval(checkSession, TOKEN_CHECK_INTERVAL);
+
+    return () => clearInterval(interval);
+  }, [user, lastActivity, showSessionWarning]);
+
+  // Handle session expiration
+  const handleSessionExpired = (message: string) => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('user');
+      setUser(null);
+      setProfile(null);
+      setError(null);
+      delete api.defaults.headers.common['Authorization'];
+      setShowSessionWarning(false);
+      toast.error(message);
+      router.push('/login');
+    }
+  };
 
   // Load user from localStorage on mount
   useEffect(() => {
@@ -47,8 +161,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           const userData = localStorage.getItem('user');
           if (userData) {
             const parsedUser = JSON.parse(userData);
+            
+            // Check if token is expired on load
+            const token = parsedUser.accessToken || parsedUser.token;
+            if (!token) {
+              localStorage.removeItem('user');
+              return;
+            }
+            if (token && isTokenExpired(token)) {
+              localStorage.removeItem('user');
+              return;
+            }
+            
             setUser(parsedUser);
-            getProfile(parsedUser.accessToken || parsedUser.token);
+            setLastActivity(Date.now());
+            getProfile(token);
           }
         } catch (error) {
           console.error('Failed to load user from storage:', error);
@@ -111,6 +238,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
         setUser(userResponse);
         localStorage.setItem('user', JSON.stringify(userResponse));
+        setLastActivity(Date.now()); // Reset activity timer on login
         
         // Set default authorization header
         api.defaults.headers.common['Authorization'] = `Bearer ${userResponse.token}`;
@@ -162,10 +290,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const createAccountFunction = async (
-    first_name: string,
-    last_name: string,
+    firstName: string,
+    lastName: string,
     email: string,
-    phone: string,
+    phoneNumber: string,
     password: string
   ) => {
     setLoading(true);
@@ -173,10 +301,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     try {
       const response = await api.post(createAccount, {
-        first_name,
-        last_name,
+        first_name: firstName,
+        last_name: lastName,
         email,
-        phone,
+        phone: phoneNumber,
         password,
       });
 
@@ -191,10 +319,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
         setUser(userResponse);
         localStorage.setItem('user', JSON.stringify(userResponse));
+        setLastActivity(Date.now()); // Reset activity timer on signup
         setError(null);
 
+        const emailVerified =
+          response.data.user?.emailVerified ??
+          response.data.user?.isEmailVerified ??
+          response.data.user?.verified;
+
         toast.success('Registration Successful');
-        router.push('/apartments');
+        if (emailVerified === false) {
+          try {
+            await api.post(requestEmailVerification, { email });
+          } catch {
+            // ignore
+          }
+          router.push(`/verify-email?email=${encodeURIComponent(email)}`);
+        } else {
+          router.push('/apartments');
+        }
       } else {
         toast.error(response.data.message || 'Registration failed');
         setError(response.data.message || 'Registration failed');
@@ -325,16 +468,103 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const forgotPasswordFunction = async (email: string): Promise<boolean> => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await api.post(forgotPassword, {
+        email: email.toLowerCase(),
+      });
+
+      if (response.data?.success) {
+        toast.success('OTP sent successfully! Check your email for the verification code');
+        setError(null);
+        return true;
+      } else {
+        const errorMessage = response.data?.message || 'Failed to send OTP';
+        setError(errorMessage);
+        toast.error(errorMessage);
+        return false;
+      }
+    } catch (error: any) {
+      console.error('Forgot Password Error:', error);
+      
+      let errorMessage = 'Failed to send OTP';
+      
+      if (error.response?.status === 404) {
+        errorMessage = 'Email not found. Please check your email address or create a new account.';
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+
+      setError(errorMessage);
+      toast.error(errorMessage);
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resetPasswordFunction = async (
+    email: string,
+    otp: string,
+    newPassword: string,
+    confirmNewPassword: string
+  ): Promise<boolean> => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await api.post(resetPassword, {
+        email: email.toLowerCase(),
+        otp,
+        newPassword,
+        confirmNewPassword,
+      });
+
+      if (response.data?.success) {
+        toast.success('Password reset successfully! You can now login with your new password');
+        setError(null);
+        return true;
+      } else {
+        const errorMessage = response.data?.message || 'Failed to reset password';
+        setError(errorMessage);
+        toast.error(errorMessage);
+        return false;
+      }
+    } catch (error: any) {
+      console.error('Reset Password Error:', error);
+      
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to reset password';
+      setError(errorMessage);
+      toast.error(errorMessage);
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const logout = () => {
     if (typeof window !== 'undefined') {
       localStorage.removeItem('user');
       setUser(null);
       setProfile(null);
       setError(null);
+      setShowSessionWarning(false);
       delete api.defaults.headers.common['Authorization'];
       toast.success('Logout Successful');
       router.push('/login');
     }
+  };
+
+  // Extend session (called when user interacts with warning)
+  const extendSession = () => {
+    setLastActivity(Date.now());
+    setShowSessionWarning(false);
+    toast.success('Session extended');
   };
 
   const value: AuthContextType = {
@@ -342,12 +572,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     profile,
     loading,
     error,
+    showSessionWarning,
     loginUser,
     createAccount: createAccountFunction,
     logout,
     getProfile: () => getProfile(),
     updateProfile: updateProfileFunction,
     deleteAccount: deleteAccountFunction,
+    forgotPassword: forgotPasswordFunction,
+    resetPassword: resetPasswordFunction,
+    extendSession,
     token: user?.accessToken || user?.token || null,
   };
 
@@ -361,4 +595,3 @@ export const useAuth = () => {
   }
   return context;
 };
-

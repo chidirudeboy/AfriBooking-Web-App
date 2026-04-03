@@ -1,9 +1,23 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  env: {
+    NEXT_PUBLIC_APP_VERSION: require('./package.json').version,
+  },
   images: {
-    domains: ['via.placeholder.com', 'localhost', 'africartz.xyz', 'api.africartz.com'],
     remotePatterns: [
+      {
+        protocol: 'http',
+        hostname: 'localhost',
+      },
+      {
+        protocol: 'https',
+        hostname: 'africartz.xyz',
+      },
+      {
+        protocol: 'https',
+        hostname: 'api.africartz.com',
+      },
       {
         protocol: 'https',
         hostname: '**',
@@ -13,8 +27,9 @@ const nextConfig = {
         hostname: '**',
       },
     ],
+    // Allow unoptimized images for external domains that might fail
+    unoptimized: false,
   },
 }
 
 module.exports = nextConfig
-

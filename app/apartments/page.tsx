@@ -9,7 +9,7 @@ import ApartmentCard from '@/components/ApartmentCard';
 import FilterModal, { FilterState } from '@/components/FilterModal';
 import { TApartments, TOptionalFees } from '@/lib/types/airbnb';
 import { getEveryApartments } from '@/lib/endpoints';
-import { usePrice } from '@/lib/utils/price';
+import { getPrice } from '@/lib/utils/price';
 import axios from 'axios';
 import { Search, Filter, Sliders } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -96,7 +96,32 @@ export default function ApartmentsPage() {
       }
     } catch (error: any) {
       console.error('Error fetching apartments:', error);
-      const errorMessage = error.response?.data?.message || error.message || 'Failed to load apartments';
+      
+      let errorMessage = 'Failed to load apartments';
+      
+      // Handle different error types
+      if (error.code === 'ECONNREFUSED' || error.message?.includes('Network Error')) {
+        errorMessage = 'Cannot connect to API server. Please ensure the backend server is running on http://localhost:8080';
+      } else if (error.code === 'ERR_NETWORK' || error.message?.includes('Network Error')) {
+        errorMessage = 'Network error. Please check your internet connection and ensure the API server is accessible.';
+      } else if (error.response?.status === 0 || error.message?.includes('CORS')) {
+        errorMessage = 'CORS error: The API server is not allowing requests from this origin. Please check CORS settings on the backend.';
+      } else if (error.response?.status === 404) {
+        errorMessage = 'API endpoint not found. Please check the API URL configuration.';
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      console.error('Full error details:', {
+        message: error.message,
+        code: error.code,
+        status: error.response?.status,
+        data: error.response?.data,
+        config: error.config?.url
+      });
+      
       toast.error(errorMessage);
     } finally {
       setLoading(false);
@@ -170,7 +195,7 @@ export default function ApartmentsPage() {
       else if (filters.priceRange === '>400000') { min = 400001; max = Number.MAX_SAFE_INTEGER; }
 
       filtered = filtered.filter((apt) => {
-        const price = usePrice(apt, reservationType as any, null); // Filter uses default price
+        const price = getPrice(apt, reservationType as any, null); // Filter uses default price
         return price >= min && price <= max;
       });
     }
@@ -185,8 +210,8 @@ export default function ApartmentsPage() {
             comparison = a.apartmentName.localeCompare(b.apartmentName);
             break;
           case 'price':
-            const priceA = usePrice(a, reservationType as any, null);
-            const priceB = usePrice(b, reservationType as any, null);
+            const priceA = getPrice(a, reservationType as any, null);
+            const priceB = getPrice(b, reservationType as any, null);
             comparison = priceA - priceB;
             break;
           case 'dateCreated':
@@ -335,4 +360,3 @@ export default function ApartmentsPage() {
     </div>
   );
 }
-

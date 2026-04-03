@@ -51,6 +51,17 @@ export type TBedroomPricing = {
   updatedAt?: string;
 };
 
+export type TSeasonalPricing = {
+  name: string;
+  startDate: string;
+  endDate: string;
+  additionalFee: number;
+  isActive?: boolean;
+  _id?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
 export type TApartments = {
   optionalFees?: TOptionalFees;
   accessDetails: TAccessDetails;
@@ -77,6 +88,7 @@ export type TApartments = {
   allowedReservations: string[];
   webLink: string;
   bedroomPricing?: TBedroomPricing[];
+  seasonalPricing?: TSeasonalPricing[];
   createdAt: string;
   updatedAt: string;
   __v: number;

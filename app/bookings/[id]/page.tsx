@@ -372,6 +372,13 @@ export default function BookingDetailsPage() {
                   <span>Message Owner</span>
                 </button>
                 <button
+                  onClick={() => router.push(`/bookings/${bookingId}/extend-stay`)}
+                  className="flex-1 flex items-center justify-center gap-2 bg-primary text-black py-3 px-4 rounded-lg font-semibold hover:opacity-90 transition-opacity"
+                >
+                  <Calendar size={20} />
+                  <span>Extend Stay</span>
+                </button>
+                <button
                   onClick={() => router.push('/apartments')}
                   className="flex-1 flex items-center justify-center gap-2 bg-primary text-black py-3 px-4 rounded-lg font-semibold hover:opacity-90 transition-opacity"
                 >
@@ -403,4 +410,3 @@ export default function BookingDetailsPage() {
     </div>
   );
 }
-

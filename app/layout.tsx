@@ -1,9 +1,11 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import { AuthProvider } from '@/contexts/AuthContext'
 import { SidebarProvider } from '@/contexts/SidebarContext'
 import { ThemeWrapper } from '@/components/ThemeWrapper'
+import SessionWarning from '@/components/SessionWarning'
+import AppUpdateBanner from '@/components/AppUpdateBanner'
 import { Toaster } from 'react-hot-toast'
 
 const inter = Inter({ subsets: ['latin'] })
@@ -11,6 +13,16 @@ const inter = Inter({ subsets: ['latin'] })
 export const metadata: Metadata = {
   title: 'AfriBooking: Find & Book',
   description: 'Find and book apartments with AfriBooking',
+}
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
+  userScalable: true,
+  viewportFit: 'cover',
+  // Prevent zoom on input focus (iOS Safari)
+  interactiveWidget: 'resizes-content',
 }
 
 export default function RootLayout({
@@ -24,11 +36,15 @@ export default function RootLayout({
         <ThemeWrapper>
           <AuthProvider>
             <SidebarProvider>
+              <AppUpdateBanner />
               {children}
+              <SessionWarning />
               <Toaster 
-                position="top-right"
+                position="top-center"
+                containerClassName="!top-16 sm:!top-4"
                 toastOptions={{
-                  className: 'dark:bg-gray-800 dark:text-white',
+                  className: 'dark:bg-gray-800 dark:text-white text-sm sm:text-base',
+                  duration: 4000,
                 }}
               />
             </SidebarProvider>
@@ -38,4 +54,3 @@ export default function RootLayout({
     </html>
   )
 }
-
