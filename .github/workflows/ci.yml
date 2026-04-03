@@ -88,7 +88,7 @@ jobs:
 
     - name: Start app and run Lighthouse
       run: |
-        npm run start &
+        PORT=3000 npm run start &
         sleep 10
         npx lighthouse http://localhost:3000 --output=json --output-path=./lighthouse-results.json --chrome-flags="--headless --no-sandbox"
 
