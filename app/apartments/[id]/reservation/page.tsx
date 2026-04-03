@@ -9,7 +9,7 @@ import Sidebar from '@/components/Sidebar';
 import { TApartments } from '@/lib/types/airbnb';
 import { getSingleApartmentUserDetails, getEveryApartments, sendReservation, getAvailableDates, sendInspection } from '@/lib/endpoints';
 import { numberWithCommas } from '@/lib/utils';
-import { usePrice } from '@/lib/utils/price';
+import { getPrice } from '@/lib/utils/price';
 import axios from 'axios';
 import { 
   ArrowLeft, Calendar, MapPin, Bed, Bath, Users, Building2,
@@ -291,7 +291,7 @@ function ReservationRequestContent() {
   const calculateTotalPrice = (): number => {
     if (!apartment) return 0;
     const nights = calculateNights();
-    const pricePerNight = usePrice(apartment, reservationType as any, selectedBedrooms);
+    const pricePerNight = getPrice(apartment, reservationType as any, selectedBedrooms);
     const baseTotal = pricePerNight * nights;
     const seasonalFee = seasonalPricingInfo.totalAdditionalFee;
     return baseTotal + seasonalFee;
@@ -515,7 +515,7 @@ function ReservationRequestContent() {
 
   const nights = calculateNights();
   const totalPrice = calculateTotalPrice();
-  const pricePerNight = usePrice(apartment, reservationType as any, selectedBedrooms);
+  const pricePerNight = getPrice(apartment, reservationType as any, selectedBedrooms);
   const imageUrl = apartment.media?.images?.[0] 
     ? (typeof apartment.media.images[0] === 'string' 
         ? apartment.media.images[0] 
@@ -1068,4 +1068,3 @@ export default function ReservationRequestPage() {
     </Suspense>
   );
 }
-

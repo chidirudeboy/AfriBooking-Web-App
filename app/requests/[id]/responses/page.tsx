@@ -849,13 +849,13 @@ export default function RequestResponsesPage() {
               </h2>
               
               <p className="text-sm text-gray-500 dark:text-gray-400 text-center mb-8 max-w-md">
-                Agents are reviewing your request. When they find matching properties, they'll respond here.
+                Agents are reviewing your request. When they find matching properties, they&apos;ll respond here.
               </p>
 
               <div className="flex items-center gap-3 bg-white dark:bg-gray-800 px-5 py-3.5 rounded-full shadow-sm">
                 <div className="w-2.5 h-2.5 rounded-full bg-green-500" />
                 <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">
-                  You'll be notified when agents respond
+                  You&apos;ll be notified when agents respond
                 </p>
               </div>
             </div>

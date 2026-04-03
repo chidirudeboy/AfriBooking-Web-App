@@ -118,7 +118,7 @@ export default function DeleteAccountPage() {
                   </li>
                   <li className="text-green-700 dark:text-green-300 text-sm sm:text-base flex items-start gap-2">
                     <span className="font-semibold">3.</span>
-                    <span>Scroll down and tap <strong>"Delete Account"</strong></span>
+                    <span>Scroll down and tap <strong>&quot;Delete Account&quot;</strong></span>
                   </li>
                   <li className="text-green-700 dark:text-green-300 text-sm sm:text-base flex items-start gap-2">
                     <span className="font-semibold">4.</span>
@@ -277,4 +277,3 @@ export default function DeleteAccountPage() {
     </div>
   );
 }
-

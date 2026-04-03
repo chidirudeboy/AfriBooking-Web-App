@@ -1,6 +1,6 @@
 import { TApartments, TOptionalFees } from '@/lib/types/airbnb';
 
-export const usePrice = (
+export const getPrice = (
   post: TApartments,
   reservationType: 'normal' | 'party' | 'movie' | 'photo',
   selectedBedrooms?: number | null
@@ -44,4 +44,3 @@ export const usePrice = (
   // This matches backend: bedroom pricing only for normal reservations
   return Math.round(basePrice);
 };
-

@@ -258,7 +258,7 @@ export default function NotificationsPage() {
                 <Bell size={32} className="text-yellow-600 dark:text-yellow-400" />
               </div>
               <p className="text-gray-500 dark:text-gray-400 text-lg mb-2">No notifications</p>
-              <p className="text-gray-400 dark:text-gray-500 text-sm">You're all caught up!</p>
+              <p className="text-gray-400 dark:text-gray-500 text-sm">You&apos;re all caught up!</p>
             </div>
           ) : (
             <div className="space-y-3 sm:space-y-4">
@@ -427,4 +427,3 @@ export default function NotificationsPage() {
     </div>
   );
 }
-

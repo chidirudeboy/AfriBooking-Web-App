@@ -20,7 +20,7 @@ export default function SessionWarning() {
               Session Expiring Soon
             </h3>
             <p className="text-sm text-yellow-800 dark:text-yellow-200 mb-3">
-              Your session will expire in 5 minutes due to inactivity. Click "Stay Logged In" to continue.
+              Your session will expire in 5 minutes due to inactivity. Click &quot;Stay Logged In&quot; to continue.
             </p>
             <div className="flex gap-2">
               <button
@@ -42,4 +42,3 @@ export default function SessionWarning() {
     </div>
   );
 }
-

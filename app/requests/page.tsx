@@ -354,7 +354,7 @@ export default function MyRequestsPage() {
               </h2>
               
               <p className="text-sm text-gray-500 dark:text-gray-400 text-center mb-8 max-w-md">
-                Create a request to let agents know what kind of apartment you're looking for.
+                Create a request to let agents know what kind of apartment you&apos;re looking for.
               </p>
 
               <button

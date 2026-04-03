@@ -9,7 +9,7 @@ import Sidebar from '@/components/Sidebar';
 import { TApartments } from '@/lib/types/airbnb';
 import { getSingleApartmentUserDetails, getEveryApartments, paymentHistory, calculateReservationPrice } from '@/lib/endpoints';
 import { numberWithCommas } from '@/lib/utils';
-import { usePrice } from '@/lib/utils/price';
+import { getPrice } from '@/lib/utils/price';
 import axios from 'axios';
 import { 
   ArrowLeft, Calendar, MapPin, Bed, Bath, Users, Building2,
@@ -263,7 +263,7 @@ function PaymentSummaryContent() {
     if (!apartment) return 0;
     // Use reservation type from reservation data or default to 'normal'
     const reservationType = reservationData?.reservationType || 'normal';
-    return usePrice(apartment, reservationType as any, selectedBedrooms);
+    return getPrice(apartment, reservationType as any, selectedBedrooms);
   }, [apartment, reservationData?.reservationType, selectedBedrooms]);
 
   // Get seasonal pricing from API response

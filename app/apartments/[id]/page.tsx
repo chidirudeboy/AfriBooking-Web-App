@@ -9,7 +9,7 @@ import Sidebar from '@/components/Sidebar';
 import { TApartments, TOptionalFees } from '@/lib/types/airbnb';
 import { getEveryApartments, getSingleApartmentUserDetails, paymentHistory, cancelReservation } from '@/lib/endpoints';
 import { numberWithCommas } from '@/lib/utils';
-import { usePrice } from '@/lib/utils/price';
+import { getPrice } from '@/lib/utils/price';
 import axios from 'axios';
 import { 
   MapPin, Bed, Bath, Users, ChevronLeft, ChevronRight, 
@@ -605,12 +605,12 @@ export default function ApartmentDetailsPage() {
     options.push({
       bedrooms: null,
       label: `${apartment.bedrooms} Bedrooms (Full Apartment)`,
-      price: usePrice(apartment, reservationType as any, null)
+      price: getPrice(apartment, reservationType as any, null)
     });
     
     // Add bedroom pricing options
     availableBedroomConfigs.forEach(config => {
-      const configPrice = usePrice(apartment, reservationType as any, config.bedrooms);
+      const configPrice = getPrice(apartment, reservationType as any, config.bedrooms);
       options.push({
         bedrooms: config.bedrooms,
         label: `${config.bedrooms} ${config.bedrooms === 1 ? 'Bedroom' : 'Bedrooms'}`,
@@ -636,7 +636,7 @@ export default function ApartmentDetailsPage() {
   // Calculate price
   const price = useMemo(() => {
     if (!apartment) return 0;
-    return usePrice(apartment, reservationType as any, selectedBedrooms);
+    return getPrice(apartment, reservationType as any, selectedBedrooms);
   }, [apartment, reservationType, selectedBedrooms]);
 
   // Parse amenities
@@ -993,7 +993,7 @@ export default function ApartmentDetailsPage() {
                   </div>
                   
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                    Choose how many bedrooms you'd like to book:
+                    Choose how many bedrooms you&apos;d like to book:
                   </p>
 
                   <div className="relative w-full">
@@ -1294,4 +1294,3 @@ export default function ApartmentDetailsPage() {
     </div>
   );
 }
-
