@@ -9,7 +9,7 @@ import ApartmentCard from '@/components/ApartmentCard';
 import FilterModal, { FilterState } from '@/components/FilterModal';
 import { TApartments, TOptionalFees } from '@/lib/types/airbnb';
 import { getEveryApartments } from '@/lib/endpoints';
-import { usePrice } from '@/lib/utils/price';
+import { getPrice } from '@/lib/utils/price';
 import axios from 'axios';
 import { Search, Filter, Sliders } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -101,7 +101,8 @@ export default function ApartmentsPage() {
       
       // Handle different error types
       if (error.code === 'ECONNREFUSED' || error.message?.includes('Network Error')) {
-        errorMessage = 'Cannot connect to API server. Please ensure the backend server is running on http://localhost:8080';
+        const configuredUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:8080/api';
+        errorMessage = `Cannot connect to API server (${configuredUrl}). Please check your network or API configuration.`;
       } else if (error.code === 'ERR_NETWORK' || error.message?.includes('Network Error')) {
         errorMessage = 'Network error. Please check your internet connection and ensure the API server is accessible.';
       } else if (error.response?.status === 0 || error.message?.includes('CORS')) {
@@ -195,7 +196,7 @@ export default function ApartmentsPage() {
       else if (filters.priceRange === '>400000') { min = 400001; max = Number.MAX_SAFE_INTEGER; }
 
       filtered = filtered.filter((apt) => {
-        const price = usePrice(apt, reservationType as any, null); // Filter uses default price
+        const price = getPrice(apt, reservationType as any, null); // Filter uses default price
         return price >= min && price <= max;
       });
     }
@@ -210,8 +211,8 @@ export default function ApartmentsPage() {
             comparison = a.apartmentName.localeCompare(b.apartmentName);
             break;
           case 'price':
-            const priceA = usePrice(a, reservationType as any, null);
-            const priceB = usePrice(b, reservationType as any, null);
+            const priceA = getPrice(a, reservationType as any, null);
+            const priceB = getPrice(b, reservationType as any, null);
             comparison = priceA - priceB;
             break;
           case 'dateCreated':
@@ -229,8 +230,58 @@ export default function ApartmentsPage() {
     setFilteredApartments(filtered);
   };
 
-  const handleApplyFilters = (newFilters: FilterState) => {
+  const handleApplyFilters = async (newFilters: FilterState) => {
     setFilters(newFilters);
+
+    // Attempt server-side filtering (matching mobile app)
+    const hasServerFilters = newFilters.state || newFilters.city || newFilters.numOfBeds || newFilters.priceRange;
+    if (!hasServerFilters) return;
+
+    try {
+      setLoading(true);
+      let authToken = null;
+      if (typeof window !== 'undefined') {
+        try {
+          const userData = localStorage.getItem('user');
+          if (userData) {
+            const userObj = JSON.parse(userData);
+            authToken = userObj?.accessToken || userObj?.token;
+          }
+        } catch { /* ignore */ }
+      }
+
+      const params: Record<string, string> = {};
+      if (newFilters.state) params.state = newFilters.state;
+      if (newFilters.city) params.city = newFilters.city;
+      if (newFilters.numOfBeds) params.bedrooms = newFilters.numOfBeds === '5+' ? '5' : newFilters.numOfBeds;
+      if (newFilters.priceRange === '<100000') { params.maxPrice = '99999'; }
+      else if (newFilters.priceRange === '100000-200000') { params.minPrice = '100000'; params.maxPrice = '200000'; }
+      else if (newFilters.priceRange === '200000-300000') { params.minPrice = '200000'; params.maxPrice = '300000'; }
+      else if (newFilters.priceRange === '300000-400000') { params.minPrice = '300000'; params.maxPrice = '400000'; }
+      else if (newFilters.priceRange === '>400000') { params.minPrice = '400001'; }
+      if (newFilters.sortBy) { params.sortBy = newFilters.sortBy; params.sortOrder = newFilters.sortOrder; }
+
+      const queryString = new URLSearchParams(params).toString();
+      const url = `${getEveryApartments}${queryString ? `?${queryString}` : ''}`;
+
+      const response = await axios.get(url, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          ...(authToken && { 'Authorization': `Bearer ${authToken}` }),
+        },
+        timeout: 15000,
+      });
+
+      const result = response.data?.apartments || response.data?.data || response.data || [];
+      if (Array.isArray(result) && result.length > 0) {
+        setApartments(result);
+      }
+    } catch {
+      // Server-side filtering failed — client-side filtering in filterApartments() still applies
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleResetFilters = () => {
@@ -360,4 +411,3 @@ export default function ApartmentsPage() {
     </div>
   );
 }
-

@@ -5,7 +5,10 @@ import { AuthProvider } from '@/contexts/AuthContext'
 import { SidebarProvider } from '@/contexts/SidebarContext'
 import { ThemeWrapper } from '@/components/ThemeWrapper'
 import SessionWarning from '@/components/SessionWarning'
+import AppUpdateBanner from '@/components/AppUpdateBanner'
 import { Toaster } from 'react-hot-toast'
+import { GoogleTagManagerHead, GoogleTagManagerBody } from '@/components/GoogleTagManager'
+import Analytics from '@/components/Analytics'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -31,10 +34,16 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <GoogleTagManagerHead />
+      </head>
       <body className={inter.className}>
+        <GoogleTagManagerBody />
         <ThemeWrapper>
           <AuthProvider>
             <SidebarProvider>
+              <AppUpdateBanner />
+              <Analytics />
               {children}
               <SessionWarning />
               <Toaster 
@@ -52,4 +61,3 @@ export default function RootLayout({
     </html>
   )
 }
-

@@ -126,7 +126,7 @@ export default function LoginPage() {
 
           <div className="text-center pt-4">
             <p className="text-gray-600 dark:text-gray-400">
-              Don't have an account?{' '}
+              Don&apos;t have an account?{' '}
               <Link href="/signup" className="text-primary hover:underline font-medium">
                 Create an account
               </Link>
@@ -137,4 +137,3 @@ export default function LoginPage() {
     </div>
   );
 }
-

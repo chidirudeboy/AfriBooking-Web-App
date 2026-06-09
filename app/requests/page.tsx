@@ -5,11 +5,11 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSidebar } from '@/contexts/SidebarContext';
 import Sidebar from '@/components/Sidebar';
-import { getUserRequests, closeUserRequest } from '@/lib/endpoints';
+import { getUserRequests, closeUserRequest, deleteUserRequest } from '@/lib/endpoints';
 import api from '@/lib/utils/api';
 import { 
   Plus, FileText, Bed, MapPin, Calendar, MessageSquare, 
-  XCircle, ArrowRight, Clock, CheckCircle2
+  XCircle, ArrowRight, Clock, CheckCircle2, Trash2
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format, differenceInDays, differenceInHours, differenceInMinutes, parseISO } from 'date-fns';
@@ -77,19 +77,7 @@ export default function MyRequestsPage() {
 
     try {
       const endpoint = closeUserRequest(requestId);
-      
-      // Try PATCH first (common for status updates)
-      let response;
-      try {
-        response = await api.patch(endpoint, { status: 'closed' });
-      } catch (patchError: any) {
-        // If PATCH fails, try PUT
-        if (patchError.response?.status === 404 || patchError.response?.status === 405) {
-          response = await api.put(endpoint, { status: 'closed' });
-        } else {
-          throw patchError;
-        }
-      }
+      const response = await api.put(endpoint, { status: 'closed' });
 
       if (response.data?.success) {
         toast.success('Request closed successfully');
@@ -99,10 +87,27 @@ export default function MyRequestsPage() {
       }
     } catch (error: any) {
       console.error('Error closing request:', error);
-      const errorMessage = error.response?.data?.message 
-        || error.response?.data?.error 
+      const errorMessage = error.response?.data?.error 
+        || error.response?.data?.message 
         || 'Failed to close request. Please try again later.';
       toast.error(errorMessage);
+    }
+  };
+
+  const handleDeleteRequest = async (requestId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm('Permanently delete this request and all its responses? This cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const endpoint = deleteUserRequest(requestId);
+      await api.delete(endpoint);
+      toast.success('Request deleted');
+      fetchRequests();
+    } catch (error: any) {
+      console.error('Error deleting request:', error);
+      toast.error(error.response?.data?.error || 'Failed to delete request');
     }
   };
 
@@ -321,6 +326,13 @@ export default function MyRequestsPage() {
                             <span className="text-xs text-gray-600 dark:text-gray-400 font-medium">Close</span>
                           </button>
                         )}
+                        <button
+                          onClick={(e) => handleDeleteRequest(request.id || request._id, e)}
+                          className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
+                        >
+                          <Trash2 className="w-3 h-3 text-red-600 dark:text-red-400" />
+                          <span className="text-xs text-red-600 dark:text-red-400 font-medium">Delete</span>
+                        </button>
                         <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 text-white">
                           <span className="text-xs font-bold">View</span>
                           <ArrowRight className="w-3 h-3" />
@@ -342,7 +354,7 @@ export default function MyRequestsPage() {
               </h2>
               
               <p className="text-sm text-gray-500 dark:text-gray-400 text-center mb-8 max-w-md">
-                Create a request to let agents know what kind of apartment you're looking for.
+                Create a request to let agents know what kind of apartment you&apos;re looking for.
               </p>
 
               <button

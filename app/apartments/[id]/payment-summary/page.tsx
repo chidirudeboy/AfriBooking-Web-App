@@ -7,9 +7,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useSidebar } from '@/contexts/SidebarContext';
 import Sidebar from '@/components/Sidebar';
 import { TApartments } from '@/lib/types/airbnb';
-import { getSingleApartmentUserDetails, getEveryApartments, paymentHistory } from '@/lib/endpoints';
+import { getSingleApartmentUserDetails, getEveryApartments, paymentHistory, calculateReservationPrice } from '@/lib/endpoints';
 import { numberWithCommas } from '@/lib/utils';
-import { usePrice } from '@/lib/utils/price';
+import { getPrice } from '@/lib/utils/price';
 import axios from 'axios';
 import { 
   ArrowLeft, Calendar, MapPin, Bed, Bath, Users, Building2,
@@ -36,6 +36,7 @@ function PaymentSummaryContent() {
   const [apartment, setApartment] = useState<TApartments | null>(null);
   const [loading, setLoading] = useState(true);
   const [reservationData, setReservationData] = useState<any>(null);
+  const [requestPricingData, setRequestPricingData] = useState<any>(null);
   const [selectedBedrooms, setSelectedBedrooms] = useState<number | null>(
     selectedBedroomsParam ? parseInt(selectedBedroomsParam) : null
   );
@@ -180,6 +181,61 @@ function PaymentSummaryContent() {
     }
   };
 
+  // Fetch backend-calculated pricing for request-response bookings
+  useEffect(() => {
+    const fetchRequestPricing = async () => {
+      if (!fromRequestResponse || !apartmentId || !checkInDate || !checkOutDate || !user) return;
+
+      try {
+        let authToken = null;
+        if (typeof window !== 'undefined') {
+          try {
+            const userData = localStorage.getItem('user');
+            if (userData) {
+              const userObj = JSON.parse(userData);
+              authToken = userObj?.accessToken || userObj?.token;
+            }
+          } catch (error) {
+            console.error('Error parsing user data:', error);
+          }
+        }
+
+        const response = await fetch(calculateReservationPrice, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(authToken && { 'Authorization': `Bearer ${authToken}` })
+          },
+          body: JSON.stringify({
+            apartmentId,
+            checkInDate,
+            checkOutDate,
+            reservationType: reservationData?.reservationType || 'normal',
+            requestId
+          })
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data?.success && data?.data) {
+            setRequestPricingData(data.data);
+          }
+        }
+      } catch {
+        // Keep local fallback calculation if request-pricing call fails
+      }
+    };
+
+    fetchRequestPricing();
+  }, [fromRequestResponse, apartmentId, checkInDate, checkOutDate, user, reservationData?.reservationType, requestId]);
+
+  const backendPriceBreakdown = useMemo(() => {
+    if (fromRequestResponse) {
+      return requestPricingData?.priceBreakdown || null;
+    }
+    return reservationData?.priceBreakdown || null;
+  }, [fromRequestResponse, requestPricingData?.priceBreakdown, reservationData?.priceBreakdown]);
+
   // Get dates - prioritize route params, fallback to reservation data
   const finalCheckInDate = useMemo(() => {
     return checkInDate || reservationData?.checkInDate || reservationData?.priceBreakdown?.checkInDate;
@@ -207,13 +263,13 @@ function PaymentSummaryContent() {
     if (!apartment) return 0;
     // Use reservation type from reservation data or default to 'normal'
     const reservationType = reservationData?.reservationType || 'normal';
-    return usePrice(apartment, reservationType as any, selectedBedrooms);
+    return getPrice(apartment, reservationType as any, selectedBedrooms);
   }, [apartment, reservationData?.reservationType, selectedBedrooms]);
 
   // Get seasonal pricing from API response
   const seasonalPricingInfo = useMemo(() => {
-    if (reservationData?.priceBreakdown?.seasonalPricing?.applied) {
-      const apiSeasonal = reservationData.priceBreakdown.seasonalPricing;
+    if (backendPriceBreakdown?.seasonalPricing?.applied) {
+      const apiSeasonal = backendPriceBreakdown.seasonalPricing;
       if (apiSeasonal.nightsWithSeasonal > 0 && apiSeasonal.additionalFeePerNight > 0) {
         const totalFee = apiSeasonal.nightsWithSeasonal * apiSeasonal.additionalFeePerNight;
         return {
@@ -228,12 +284,12 @@ function PaymentSummaryContent() {
       }
     }
     return { totalAdditionalFee: 0, applicablePricing: [] };
-  }, [reservationData?.priceBreakdown?.seasonalPricing]);
+  }, [backendPriceBreakdown?.seasonalPricing]);
 
   // Get discount info from API response
   const discountInfo = useMemo(() => {
-    if (reservationData?.priceBreakdown?.discount) {
-      const apiDiscount = reservationData.priceBreakdown.discount;
+    if (backendPriceBreakdown?.discount) {
+      const apiDiscount = backendPriceBreakdown.discount;
       if (apiDiscount.percent > 0) {
         return {
           percent: apiDiscount.percent,
@@ -243,14 +299,14 @@ function PaymentSummaryContent() {
       }
     }
     return null;
-  }, [reservationData?.priceBreakdown?.discount]);
+  }, [backendPriceBreakdown?.discount]);
 
-  const cautionFee = apartment?.cautionFee || 0;
+  const cautionFee = backendPriceBreakdown?.cautionFee ?? apartment?.cautionFee ?? 0;
   const subtotalBeforeDiscount = (basePrice * nights) + seasonalPricingInfo.totalAdditionalFee;
   const discountAmount = discountInfo?.amount || (discountInfo ? (subtotalBeforeDiscount * discountInfo.percent) / 100 : 0);
   const baseSubtotalAfterDiscount = (basePrice * nights) - discountAmount;
   const subtotal = baseSubtotalAfterDiscount + seasonalPricingInfo.totalAdditionalFee;
-  const total = subtotal + cautionFee;
+  const total = backendPriceBreakdown?.totalAmount ?? (subtotal + cautionFee);
 
   // Get bedroom configuration name
   const bedroomConfigName = useMemo(() => {
@@ -489,6 +545,27 @@ function PaymentSummaryContent() {
                 </div>
               )}
 
+              {!!backendPriceBreakdown?.commission && backendPriceBreakdown.commission > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600 dark:text-gray-400">Agent Commission</span>
+                  <span className="font-medium text-gray-900 dark:text-white">₦{numberWithCommas(Math.round(backendPriceBreakdown.commission))}</span>
+                </div>
+              )}
+
+              {!!backendPriceBreakdown?.africartzServiceFee && backendPriceBreakdown.africartzServiceFee > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600 dark:text-gray-400">Service Fee</span>
+                  <span className="font-medium text-gray-900 dark:text-white">₦{numberWithCommas(Math.round(backendPriceBreakdown.africartzServiceFee))}</span>
+                </div>
+              )}
+
+              {!!backendPriceBreakdown?.paystackFee && backendPriceBreakdown.paystackFee > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600 dark:text-gray-400">Payment Processing Fee</span>
+                  <span className="font-medium text-gray-900 dark:text-white">₦{numberWithCommas(Math.round(backendPriceBreakdown.paystackFee))}</span>
+                </div>
+              )}
+
               {/* Caution Fee */}
               {cautionFee > 0 && (
                 <div className="flex justify-between text-sm pt-2 border-t border-gray-200 dark:border-gray-700">
@@ -535,4 +612,3 @@ export default function PaymentSummaryPage() {
     </Suspense>
   );
 }
-

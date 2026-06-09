@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSidebar } from '@/contexts/SidebarContext';
@@ -68,8 +68,13 @@ export default function SettingsPage() {
   const [deletePassword, setDeletePassword] = useState('');
   const [showPasswordInput, setShowPasswordInput] = useState(false);
 
-  if (!user) {
-    router.push('/login');
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push('/login');
+    }
+  }, [loading, router, user]);
+
+  if (loading || !user) {
     return null;
   }
 
@@ -228,7 +233,7 @@ export default function SettingsPage() {
               <span className="text-sm font-semibold text-primary">Africartz</span>
             </div>
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              Version 1.0.0
+              Version {process.env.NEXT_PUBLIC_APP_VERSION || '1.0.0'}
             </p>
           </div>
         </main>
@@ -236,4 +241,3 @@ export default function SettingsPage() {
     </div>
   );
 }
-
