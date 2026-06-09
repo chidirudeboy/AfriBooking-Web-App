@@ -233,7 +233,7 @@ export default function SettingsPage() {
               <span className="text-sm font-semibold text-primary">Africartz</span>
             </div>
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              Version 1.0.0
+              Version {process.env.NEXT_PUBLIC_APP_VERSION || '1.0.0'}
             </p>
           </div>
         </main>
