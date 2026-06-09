@@ -7,11 +7,11 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useSidebar } from '@/contexts/SidebarContext';
 import Sidebar from '@/components/Sidebar';
 import { TApartments } from '@/lib/types/airbnb';
-import { getSingleApartmentUserDetails, getEveryApartments, bookAndPay, paymentHistory, bookFromRequestResponse } from '@/lib/endpoints';
+import { getSingleApartmentUserDetails, getEveryApartments, bookAndPay, paymentHistory, bookFromRequestResponse, getLandlordPolicy } from '@/lib/endpoints';
 import axios from 'axios';
-import { 
-  ArrowLeft, User, Mail, Phone, Shield, AlertCircle, 
-  Upload, X, CheckCircle, FileText
+import {
+  ArrowLeft, User, Shield, AlertCircle,
+  Upload, X, CheckCircle, FileText, ScrollText
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -48,6 +48,8 @@ function BookApartmentContent() {
   const [emergencyName, setEmergencyName] = useState('');
   const [emergencyPhone, setEmergencyPhone] = useState('');
   const [policyAccepted, setPolicyAccepted] = useState(false);
+  const [landlordPolicy, setLandlordPolicy] = useState('');
+  const [landlordPolicyAccepted, setLandlordPolicyAccepted] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const selectedBedrooms = selectedBedroomsParam ? parseInt(selectedBedroomsParam) : null;
@@ -65,6 +67,7 @@ function BookApartmentContent() {
     }
     if (apartmentId) {
       fetchApartmentDetails();
+      fetchLandlordPolicy();
     }
     // Only fetch reservation data if it's NOT a request response booking
     if (reservationId && !fromRequestResponse) {
@@ -75,6 +78,33 @@ function BookApartmentContent() {
       setEmail(user.email || user.user.email);
     }
   }, [user, router, apartmentId, reservationId, fromRequestResponse]);
+
+  const fetchLandlordPolicy = async () => {
+    if (!apartmentId) return;
+    try {
+      let authToken = null;
+      if (typeof window !== 'undefined') {
+        try {
+          const userData = localStorage.getItem('user');
+          if (userData) {
+            const userObj = JSON.parse(userData);
+            authToken = userObj?.accessToken || userObj?.token;
+          }
+        } catch { /* ignore */ }
+      }
+      const response = await fetch(getLandlordPolicy(apartmentId), {
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authToken && { 'Authorization': `Bearer ${authToken}` }),
+        },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        const policy = data?.data?.policy || data?.policy || '';
+        setLandlordPolicy(policy);
+      }
+    } catch { /* policy is optional — silently ignore */ }
+  };
 
   const fetchReservationData = async () => {
     if (!reservationId || !user) return;
@@ -281,6 +311,10 @@ function BookApartmentContent() {
     }
     if (!policyAccepted) {
       toast.error('Please accept the refund policy to proceed');
+      return false;
+    }
+    if (landlordPolicy && !landlordPolicyAccepted) {
+      toast.error("You must accept the landlord's policy to proceed");
       return false;
     }
 
@@ -1070,6 +1104,36 @@ function BookApartmentContent() {
               </label>
             </div>
           </div>
+
+          {/* Landlord Policy */}
+          {landlordPolicy ? (
+            <div className="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 shadow-sm border border-gray-200 dark:border-gray-700 mb-4 sm:mb-6">
+              <div className="flex items-center mb-4">
+                <div className="bg-amber-50 dark:bg-amber-900/30 p-3 rounded-full mr-3">
+                  <ScrollText size={20} className="text-amber-600 dark:text-amber-400" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-gray-900 dark:text-white">Landlord&apos;s Policy</h2>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Please read and accept before proceeding</p>
+                </div>
+              </div>
+              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg p-4 mb-4 max-h-48 overflow-y-auto">
+                <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{landlordPolicy}</p>
+              </div>
+              <div className="flex items-start">
+                <input
+                  type="checkbox"
+                  id="landlordPolicy"
+                  checked={landlordPolicyAccepted}
+                  onChange={(e) => setLandlordPolicyAccepted(e.target.checked)}
+                  className="mt-1 mr-3 w-5 h-5 text-primary border-gray-300 dark:border-gray-600 rounded focus:ring-primary bg-white dark:bg-gray-700"
+                />
+                <label htmlFor="landlordPolicy" className="text-sm text-gray-700 dark:text-gray-300">
+                  I have read and accept the landlord&apos;s policy *
+                </label>
+              </div>
+            </div>
+          ) : null}
 
           {/* Submit Button */}
           <button

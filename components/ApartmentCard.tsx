@@ -1,10 +1,11 @@
 'use client';
 
+import { useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { TApartments } from '@/lib/types/airbnb';
 import { numberWithCommas } from '@/lib/utils';
-import { MapPin, Bed, Bath, Users } from 'lucide-react';
+import { MapPin, Bed, Bath, Users, Play } from 'lucide-react';
 
 interface ApartmentCardProps {
   apartment: TApartments;
@@ -12,6 +13,8 @@ interface ApartmentCardProps {
 }
 
 export default function ApartmentCard({ apartment, reservationType = 'normal' }: ApartmentCardProps) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+
   // Get primary image
   const getPrimaryImage = () => {
     let reelImage: string | null = null;
@@ -44,6 +47,14 @@ export default function ApartmentCard({ apartment, reservationType = 'normal' }:
     return reelImage || firstImage || defaultFallbackImage;
   };
 
+  const getPrimaryVideo = (): string | null => {
+    const first = apartment.media?.videos?.[0];
+    if (first) return typeof first === 'string' ? first : (first as any).fullPath || (first as any).uri || (first as any).url || null;
+    const legacy = (apartment as any).videos?.[0];
+    if (legacy) return typeof legacy === 'string' ? legacy : legacy.uri || legacy.url || null;
+    return null;
+  };
+
   // Calculate price based on reservation type
   const getPrice = () => {
     let basePrice = apartment.defaultStayFee || 0;
@@ -60,20 +71,53 @@ export default function ApartmentCard({ apartment, reservationType = 'normal' }:
   };
 
   const imageUrl = getPrimaryImage();
+  const hasRealImage = !imageUrl.startsWith('data:image/svg');
+  const primaryVideo = !hasRealImage ? getPrimaryVideo() : null;
   const price = getPrice();
 
   return (
     <Link href={`/apartments/${apartment._id}`}>
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md dark:shadow-gray-900 overflow-hidden hover:shadow-xl dark:hover:shadow-gray-800 transition-shadow duration-300 cursor-pointer">
-        {/* Image */}
+        {/* Media */}
         <div className="relative w-full h-64 bg-gray-200 dark:bg-gray-700">
-          <Image
-            src={imageUrl}
-            alt={apartment.apartmentName}
-            fill
-            className="object-cover"
-            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-          />
+          {primaryVideo ? (
+            <>
+              <video
+                ref={videoRef}
+                src={primaryVideo}
+                muted
+                playsInline
+                preload="metadata"
+                className="absolute inset-0 w-full h-full object-cover"
+                onLoadedMetadata={() => {
+                  if (videoRef.current) videoRef.current.currentTime = 1;
+                }}
+              />
+              <div
+                className="absolute inset-0 flex flex-col items-center justify-center"
+                style={{ backgroundColor: 'rgba(0,0,0,0.35)' }}
+              >
+                <div
+                  className="w-16 h-16 rounded-full flex items-center justify-center mb-3"
+                  style={{ backgroundColor: 'rgba(250,208,0,0.95)' }}
+                >
+                  <Play size={32} color="#000" fill="#000" />
+                </div>
+                <p className="text-white font-bold text-base text-center px-4">Video preview available</p>
+                <p className="text-sm text-center mt-1 px-4" style={{ color: 'rgba(255,255,255,0.92)' }}>
+                  Tap to watch the apartment tour
+                </p>
+              </div>
+            </>
+          ) : (
+            <Image
+              src={imageUrl}
+              alt={apartment.apartmentName}
+              fill
+              className="object-cover"
+              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+            />
+          )}
           {apartment.isBooked && (
             <div className="absolute top-2 right-2 bg-red-500 text-white px-3 py-1 rounded-full text-xs font-semibold">
               Booked

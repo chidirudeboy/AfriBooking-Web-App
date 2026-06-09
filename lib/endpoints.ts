@@ -85,5 +85,7 @@ export const getUserRequests = (status?: string, page = 1, limit = 10) =>
 export const getRequestResponses = (requestId: string) => endpoint2(`user/request/${requestId}/responses`);
 export const closeUserRequest = (requestId: string) => endpoint2(`user/request/${requestId}/close`);
 export const deleteUserRequest = (requestId: string) => endpoint2(`user/request/${requestId}`);
-export const bookFromRequestResponse = (requestId: string, requestResponseId: string, apartmentId: string) => 
+export const bookFromRequestResponse = (requestId: string, requestResponseId: string, apartmentId: string) =>
 	endpoint2(`bookings/request/${requestId}/response/${requestResponseId}/apartment/${apartmentId}/book`);
+
+export const getLandlordPolicy = (apartmentId: string) => endpoint2(`apartment/${apartmentId}/landlord-policy`);
