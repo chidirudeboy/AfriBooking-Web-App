@@ -7,7 +7,7 @@ import { useSidebar } from '@/contexts/SidebarContext';
 import Sidebar from '@/components/Sidebar';
 import { getAllNotification, markSingleNotificationRead, deleteSingleNotification, deleteSingleNotificationAlt, deleteSingleNotificationAlt2, deleteSingleNotificationAlt3, sendInspection } from '@/lib/endpoints';
 import axios from 'axios';
-import { Bell, Trash2, CheckCircle, X, Calendar, AlertCircle, RefreshCw } from 'lucide-react';
+import { Bell, Trash2, CheckCircle, X, Calendar, RefreshCw, Eye, EyeOff, Copy } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 
@@ -24,7 +24,34 @@ interface Notification {
   data?: string | any;
   created_at?: string;
   createdAt?: string;
+  releaseCode?: string;
+  metadata?: { releaseCode?: string };
 }
+
+const extractReleaseCode = (notification: Notification): string | null => {
+  // Step 1: direct fields
+  if (notification.releaseCode) return notification.releaseCode;
+  if (notification.metadata?.releaseCode) return notification.metadata.releaseCode;
+
+  // Step 2: parse data field
+  if (notification.data) {
+    try {
+      const parsed = typeof notification.data === 'string'
+        ? JSON.parse(notification.data)
+        : notification.data;
+      if (parsed.releaseCode) return parsed.releaseCode;
+      if (parsed.release_code) return parsed.release_code;
+      if (parsed.code) return parsed.code;
+    } catch { /* ignore */ }
+  }
+
+  // Step 3: regex on body
+  const body = notification.body || notification.message || '';
+  const match = body.match(/release code(?: is|:)\s*([A-Za-z0-9-]+)/i);
+  if (match) return match[1];
+
+  return null;
+};
 
 export default function NotificationsPage() {
   const router = useRouter();
@@ -33,6 +60,7 @@ export default function NotificationsPage() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [revealedCodes, setRevealedCodes] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!user) {
@@ -271,6 +299,8 @@ export default function NotificationsPage() {
                 const createdAt = notification.created_at || notification.createdAt;
                 const expired = isExpired(createdAt);
                 const data = parseNotificationData(notification.data);
+                const releaseCode = extractReleaseCode(notification);
+                const isCodeRevealed = notificationId ? revealedCodes.has(notificationId) : false;
 
                 // Determine if notification should be clickable (reservation accepted)
                 // Check for both snake_case and camelCase field names
@@ -414,6 +444,48 @@ export default function NotificationsPage() {
                             <span>Book Now</span>
                             <Calendar size={18} />
                           </button>
+                        </div>
+                      )}
+
+                      {/* Release Code Section */}
+                      {releaseCode && (
+                        <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700" onClick={(e) => e.stopPropagation()}>
+                          <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Release Code</p>
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 bg-gray-100 dark:bg-gray-700 rounded-lg px-3 py-2 font-mono text-sm text-gray-900 dark:text-white tracking-widest">
+                              {isCodeRevealed ? releaseCode : '••••••••'}
+                            </div>
+                            <button
+                              onClick={() => {
+                                if (!notificationId) return;
+                                setRevealedCodes(prev => {
+                                  const next = new Set(prev);
+                                  if (next.has(notificationId)) next.delete(notificationId);
+                                  else next.add(notificationId);
+                                  return next;
+                                });
+                              }}
+                              className="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                              title={isCodeRevealed ? 'Hide code' : 'Reveal code'}
+                            >
+                              {isCodeRevealed
+                                ? <EyeOff size={16} className="text-gray-600 dark:text-gray-300" />
+                                : <Eye size={16} className="text-gray-600 dark:text-gray-300" />
+                              }
+                            </button>
+                            {isCodeRevealed && (
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(releaseCode);
+                                  toast.success('Release code copied!');
+                                }}
+                                className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30 hover:bg-green-200 dark:hover:bg-green-900/50 transition-colors"
+                                title="Copy code"
+                              >
+                                <Copy size={16} className="text-green-700 dark:text-green-400" />
+                              </button>
+                            )}
+                          </div>
                         </div>
                       )}
                     </div>

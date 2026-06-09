@@ -5,10 +5,10 @@ import { useRouter, useParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSidebar } from '@/contexts/SidebarContext';
 import Sidebar from '@/components/Sidebar';
-import { ViewUserBookingHistory, getChatByBooking, createChatForBooking } from '@/lib/endpoints';
+import { ViewUserBookingHistory, getChatByBooking, createChatForBooking, getAllNotification } from '@/lib/endpoints';
 import { numberWithCommas } from '@/lib/utils';
 import axios from 'axios';
-import { ArrowLeft, Home, Calendar, Home as HomeIcon, DollarSign, Info, History, MessageSquare } from 'lucide-react';
+import { ArrowLeft, Home, Calendar, Home as HomeIcon, DollarSign, Info, History, MessageSquare, Eye, EyeOff, Copy, Key, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format, differenceInDays } from 'date-fns';
 
@@ -53,6 +53,10 @@ export default function BookingDetailsPage() {
   const { isCollapsed } = useSidebar();
   const [booking, setBooking] = useState<BookingDetails | null>(null);
   const [loading, setLoading] = useState(true);
+  const [releaseCode, setReleaseCode] = useState<string | null>(null);
+  const [showReleaseCode, setShowReleaseCode] = useState(false);
+  const [releaseCodeModalOpen, setReleaseCodeModalOpen] = useState(false);
+  const [releaseCodeAcknowledged, setReleaseCodeAcknowledged] = useState(false);
 
   useEffect(() => {
     if (!user) {
@@ -61,6 +65,53 @@ export default function BookingDetailsPage() {
     }
     fetchBookingDetails();
   }, [user, router, params.id]);
+
+  const extractReleaseCode = (notification: any): string | null => {
+    if (notification.releaseCode) return notification.releaseCode;
+    if (notification.metadata?.releaseCode) return notification.metadata.releaseCode;
+    try {
+      const parsed = typeof notification.data === 'string'
+        ? JSON.parse(notification.data)
+        : (notification.data || {});
+      if (parsed.releaseCode) return parsed.releaseCode;
+      if (parsed.release_code) return parsed.release_code;
+      if (parsed.code) return parsed.code;
+    } catch { /* ignore */ }
+    const body = notification.body || notification.message || '';
+    const match = body.match(/release code(?: is|:)\s*([A-Za-z0-9-]+)/i);
+    return match ? match[1] : null;
+  };
+
+  const fetchReleaseCodeFromNotifications = async (bookingId: string) => {
+    try {
+      let authToken = null;
+      let userId = null;
+      if (typeof window !== 'undefined') {
+        try {
+          const userData = localStorage.getItem('user');
+          if (userData) {
+            const userObj = JSON.parse(userData);
+            authToken = userObj?.accessToken || userObj?.token;
+            userId = userObj?.user?._id || userObj?._id || userObj?.id;
+          }
+        } catch { /* ignore */ }
+      }
+      if (!userId) return;
+      const response = await axios.get(getAllNotification(userId), {
+        headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+      });
+      const notifications: any[] = response.data?.data || response.data?.notifications || [];
+      for (const n of notifications) {
+        try {
+          const parsed = typeof n.data === 'string' ? JSON.parse(n.data) : (n.data || {});
+          const nBookingId = parsed.bookingId || parsed.booking_id;
+          if (nBookingId && nBookingId !== bookingId) continue;
+        } catch { /* ignore */ }
+        const code = extractReleaseCode(n);
+        if (code) { setReleaseCode(code); break; }
+      }
+    } catch { /* ignore */ }
+  };
 
   const fetchBookingDetails = async () => {
     if (!params.id) return;
@@ -89,7 +140,12 @@ export default function BookingDetailsPage() {
       });
 
       if (response.data?.success && response.data?.data) {
-        setBooking(response.data.data);
+        const bookingData = response.data.data;
+        setBooking(bookingData);
+        const statusesToCheck = ['booked', 'check-in', 'completed'];
+        if (statusesToCheck.includes(bookingData.status?.toLowerCase())) {
+          fetchReleaseCodeFromNotifications(bookingData._id || bookingData.id || params.id as string);
+        }
       } else {
         toast.error('Failed to load booking details');
         router.push('/bookings');
@@ -361,6 +417,97 @@ export default function BookingDetailsPage() {
                   Please keep this receipt for your records. Contact support for any inquiries regarding your booking.
                 </p>
               </div>
+
+              {/* Release Code Section */}
+              {['booked', 'check-in', 'completed'].includes(booking.status?.toLowerCase()) && (
+                <div className="mb-6 sm:mb-8">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Key size={20} className="text-primary" />
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Release Code</h3>
+                    <span className={`ml-auto px-2 py-1 rounded-full text-xs font-semibold ${
+                      releaseCode
+                        ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                        : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
+                    }`}>
+                      {releaseCode ? 'Available' : 'Not sent yet'}
+                    </span>
+                  </div>
+                  {releaseCode ? (
+                    <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg p-4">
+                      <p className="text-xs text-amber-700 dark:text-amber-400 mb-3">
+                        Share this code with the property agent to confirm your check-out and release your payout.
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 bg-white dark:bg-gray-800 border border-amber-300 dark:border-amber-600 rounded-lg px-4 py-3 font-mono text-base text-gray-900 dark:text-white tracking-widest text-center">
+                          {showReleaseCode ? releaseCode : '••••••••'}
+                        </div>
+                        <button
+                          onClick={() => {
+                            if (!releaseCodeAcknowledged) {
+                              setReleaseCodeModalOpen(true);
+                            } else {
+                              setShowReleaseCode(prev => !prev);
+                            }
+                          }}
+                          className="p-3 rounded-lg bg-amber-100 dark:bg-amber-900/30 hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors"
+                          title={showReleaseCode ? 'Hide code' : 'Reveal code'}
+                        >
+                          {showReleaseCode
+                            ? <EyeOff size={18} className="text-amber-700 dark:text-amber-400" />
+                            : <Eye size={18} className="text-amber-700 dark:text-amber-400" />
+                          }
+                        </button>
+                        {showReleaseCode && (
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(releaseCode);
+                              toast.success('Release code copied!');
+                            }}
+                            className="p-3 rounded-lg bg-green-100 dark:bg-green-900/30 hover:bg-green-200 dark:hover:bg-green-900/50 transition-colors"
+                            title="Copy code"
+                          >
+                            <Copy size={18} className="text-green-700 dark:text-green-400" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500 dark:text-gray-400 pl-1">
+                      Your release code will appear here once the property agent sends it.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Release Code Acknowledgment Modal */}
+              {releaseCodeModalOpen && (
+                <>
+                  <div className="fixed inset-0 bg-black/60 z-50" onClick={() => setReleaseCodeModalOpen(false)} />
+                  <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[90vw] max-w-md bg-white dark:bg-gray-800 rounded-xl shadow-2xl z-50 p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-bold text-gray-900 dark:text-white">Important Notice</h3>
+                      <button onClick={() => setReleaseCodeModalOpen(false)}>
+                        <X size={20} className="text-gray-500 dark:text-gray-400" />
+                      </button>
+                    </div>
+                    <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-lg p-4 mb-4">
+                      <p className="text-sm text-red-700 dark:text-red-400">
+                        <strong>Warning:</strong> Only share this release code with the property agent at the time of check-out. Do not share it before your check-out date or with anyone else. Sharing it early may result in your payout being released before you leave the property.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setReleaseCodeAcknowledged(true);
+                        setShowReleaseCode(true);
+                        setReleaseCodeModalOpen(false);
+                      }}
+                      className="w-full py-3 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-semibold transition-colors"
+                    >
+                      I Understand, Show Code
+                    </button>
+                  </div>
+                </>
+              )}
 
               {/* Action Buttons */}
               <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
