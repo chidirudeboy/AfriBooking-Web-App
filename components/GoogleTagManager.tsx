@@ -1,13 +1,9 @@
-import Script from 'next/script';
-
-const GTM_ID = process.env.NEXT_PUBLIC_GTM_ID;
+const GTM_ID = process.env.NEXT_PUBLIC_GTM_ID || 'GTM-W72MN7KL';
 
 export function GoogleTagManagerHead() {
   if (!GTM_ID) return null;
   return (
-    <Script
-      id="gtm-head"
-      strategy="afterInteractive"
+    <script
       dangerouslySetInnerHTML={{
         __html: `(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
 new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
