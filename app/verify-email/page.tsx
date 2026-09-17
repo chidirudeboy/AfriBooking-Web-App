@@ -11,6 +11,7 @@ function VerifyEmailContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const email = searchParams.get('email') || '';
+  const phone = searchParams.get('phone') || '';
 
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
@@ -31,7 +32,7 @@ function VerifyEmailContent() {
       const res = await api.post(verifyEmailVerification, { email, otp });
       if (res.data?.success) {
         toast.success('Email verified. Please log in.');
-        router.push('/login');
+        router.push(`/verify-phone?email=${encodeURIComponent(email)}&phone=${encodeURIComponent(phone)}`);
       } else {
         toast.error(res.data?.message || 'Verification failed.');
       }

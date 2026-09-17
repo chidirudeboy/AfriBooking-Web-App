@@ -5,14 +5,18 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { TApartments } from '@/lib/types/airbnb';
 import { numberWithCommas } from '@/lib/utils';
-import { MapPin, Bed, Bath, Users, Play } from 'lucide-react';
+import { MapPin, Bed, Bath, Users, Play, Heart, Star } from 'lucide-react';
+import { getPrice as calculatePrice } from '@/lib/utils/price';
 
 interface ApartmentCardProps {
   apartment: TApartments;
   reservationType?: string;
+  isFavorite?: boolean;
+  favoritePending?: boolean;
+  onToggleFavorite?: (apartmentId: string) => void;
 }
 
-export default function ApartmentCard({ apartment, reservationType = 'normal' }: ApartmentCardProps) {
+export default function ApartmentCard({ apartment, reservationType = 'normal', isFavorite = false, favoritePending = false, onToggleFavorite }: ApartmentCardProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   // Get primary image
@@ -55,29 +59,16 @@ export default function ApartmentCard({ apartment, reservationType = 'normal' }:
     return null;
   };
 
-  // Calculate price based on reservation type
-  const getPrice = () => {
-    let basePrice = apartment.defaultStayFee || 0;
-
-    if (reservationType === 'party' && apartment.optionalFees?.partyFee) {
-      basePrice += apartment.optionalFees.partyFee;
-    } else if (reservationType === 'movie' && apartment.optionalFees?.movieShootFee) {
-      basePrice += apartment.optionalFees.movieShootFee;
-    } else if (reservationType === 'photo' && apartment.optionalFees?.photoShootFee) {
-      basePrice += apartment.optionalFees.photoShootFee;
-    }
-
-    return basePrice;
-  };
-
   const imageUrl = getPrimaryImage();
   const hasRealImage = !imageUrl.startsWith('data:image/svg');
   const primaryVideo = !hasRealImage ? getPrimaryVideo() : null;
-  const price = getPrice();
+  const price = calculatePrice(apartment, reservationType as any, null);
+  const reviewCount = Number(apartment.totalReviews || 0);
+  const rating = Number(apartment.averageRating || 0);
 
   return (
-    <Link href={`/apartments/${apartment._id}`}>
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md dark:shadow-gray-900 overflow-hidden hover:shadow-xl dark:hover:shadow-gray-800 transition-shadow duration-300 cursor-pointer">
+    <article className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-sm ring-1 ring-gray-200 dark:ring-gray-700 overflow-hidden hover:-translate-y-0.5 hover:shadow-xl dark:hover:shadow-black/30 transition-all duration-300">
+      <Link href={`/apartments/${apartment._id}`} className="block focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary">
         {/* Media */}
         <div className="relative w-full h-64 bg-gray-200 dark:bg-gray-700">
           {primaryVideo ? (
@@ -119,7 +110,7 @@ export default function ApartmentCard({ apartment, reservationType = 'normal' }:
             />
           )}
           {apartment.isBooked && (
-            <div className="absolute top-2 right-2 bg-red-500 text-white px-3 py-1 rounded-full text-xs font-semibold">
+            <div className="absolute top-3 left-3 bg-red-500 text-white px-3 py-1 rounded-full text-xs font-semibold shadow-sm">
               Booked
             </div>
           )}
@@ -127,9 +118,14 @@ export default function ApartmentCard({ apartment, reservationType = 'normal' }:
 
         {/* Content */}
         <div className="p-4">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2 line-clamp-1">
-            {apartment.apartmentName}
-          </h3>
+          <div className="mb-2 flex items-start justify-between gap-3">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white line-clamp-1">{apartment.apartmentName}</h3>
+            {reviewCount > 0 && (
+              <span className="flex shrink-0 items-center gap-1 text-sm font-semibold text-gray-800 dark:text-gray-100">
+                <Star size={15} className="fill-amber-400 text-amber-400" /> {rating.toFixed(1)}
+              </span>
+            )}
+          </div>
 
           <div className="flex items-center text-gray-600 dark:text-gray-400 text-sm mb-3">
             <MapPin size={16} className="mr-1" />
@@ -169,8 +165,18 @@ export default function ApartmentCard({ apartment, reservationType = 'normal' }:
             </button>
           </div>
         </div>
-      </div>
-    </Link>
+      </Link>
+      {onToggleFavorite && (
+        <button
+          type="button"
+          onClick={() => onToggleFavorite(apartment._id)}
+          disabled={favoritePending}
+          className="absolute right-3 top-3 z-10 grid h-11 w-11 place-items-center rounded-full bg-white/95 text-gray-900 shadow-lg backdrop-blur transition hover:scale-105 disabled:opacity-60 dark:bg-gray-900/90 dark:text-white"
+          aria-label={isFavorite ? 'Remove from saved stays' : 'Save apartment'}
+        >
+          <Heart size={21} className={isFavorite ? 'fill-rose-500 text-rose-500' : ''} />
+        </button>
+      )}
+    </article>
   );
 }
-

@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import MediaModal from '@/components/MediaModal';
 import toast from 'react-hot-toast';
+import ApartmentEnhancements from '@/components/ApartmentEnhancements';
 
 export default function ApartmentDetailsPage() {
   const params = useParams();
@@ -528,7 +529,7 @@ export default function ApartmentDetailsPage() {
 
       // Try to fetch single apartment details first
       try {
-        const response = await axios.get(`${getSingleApartmentUserDetails}?apartmentId=${apartmentId}`, {
+        const response = await axios.get(`${getSingleApartmentUserDetails}/${apartmentId}`, {
           headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
@@ -638,6 +639,16 @@ export default function ApartmentDetailsPage() {
     if (!apartment) return 0;
     return getPrice(apartment, reservationType as any, selectedBedrooms);
   }, [apartment, reservationType, selectedBedrooms]);
+
+  const reservationTypeAllowed = (value: string) => {
+    if (!apartment || value === 'normal') return true;
+    const fee = value === 'party'
+      ? apartment.optionalFees?.partyFee
+      : value === 'movie'
+        ? apartment.optionalFees?.movieShootFee
+        : apartment.optionalFees?.photoShootFee;
+    return Number(fee || 0) > 0 && (!Array.isArray(apartment.allowedReservations) || apartment.allowedReservations.includes(value));
+  };
 
   // Parse amenities
   const amenities = useMemo(() => {
@@ -1106,22 +1117,7 @@ export default function ApartmentDetailsPage() {
                 )}
               </div>
 
-              {/* Share Link */}
-              {apartment.webLink && (
-                <div className="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 mb-4 sm:mb-6 shadow-sm border border-gray-200 dark:border-gray-700">
-                  <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white mb-3 sm:mb-4">Share Link</h2>
-                  <button
-                    onClick={handleCopyLink}
-                    className="w-full flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0 p-3 sm:p-4 bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-200 dark:border-blue-800 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
-                  >
-                    <div className="flex-1 text-left min-w-0 w-full sm:w-auto overflow-hidden">
-                      <p className="text-sm sm:text-base font-medium text-blue-900 dark:text-blue-200 mb-1">Share this apartment</p>
-                      <p className="text-xs sm:text-sm text-blue-700 dark:text-blue-300 break-all sm:truncate overflow-hidden">{apartment.webLink}</p>
-                    </div>
-                    <Copy size={18} className="sm:w-5 sm:h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 sm:ml-4 self-end sm:self-auto" />
-                  </button>
-                </div>
-              )}
+              <ApartmentEnhancements apartment={apartment} reservationType={reservationType} selectedBedrooms={selectedBedrooms} price={price} />
             </div>
 
             {/* Sidebar - Price & Booking */}
@@ -1141,14 +1137,18 @@ export default function ApartmentDetailsPage() {
                     ].map((type) => (
                       <button
                         key={type.value}
-                        onClick={() => setReservationType(type.value)}
+                        disabled={!reservationTypeAllowed(type.value)}
+                        onClick={() => reservationTypeAllowed(type.value) && setReservationType(type.value)}
                         className={`px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors ${
                           reservationType === type.value
                             ? 'bg-primary text-white'
-                            : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                            : reservationTypeAllowed(type.value)
+                              ? 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                              : 'cursor-not-allowed bg-gray-100 text-gray-400 opacity-45 blur-[0.35px] dark:bg-gray-800 dark:text-gray-600'
                         }`}
+                        title={reservationTypeAllowed(type.value) ? type.label : `${type.label} is not allowed for this property`}
                       >
-                        {type.label}
+                        {type.label}{!reservationTypeAllowed(type.value) && <span className="block text-[10px] font-normal">Not allowed</span>}
                       </button>
                     ))}
                   </div>

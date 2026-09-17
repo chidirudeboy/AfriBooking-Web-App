@@ -76,7 +76,7 @@ function ReservationRequestContent() {
       }
 
       try {
-        const response = await axios.get(`${getSingleApartmentUserDetails}?apartmentId=${apartmentId}`, {
+        const response = await axios.get(`${getSingleApartmentUserDetails}/${apartmentId}`, {
           headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json',

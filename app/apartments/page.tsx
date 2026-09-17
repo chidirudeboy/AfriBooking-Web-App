@@ -11,8 +11,9 @@ import { TApartments, TOptionalFees } from '@/lib/types/airbnb';
 import { getEveryApartments } from '@/lib/endpoints';
 import { getPrice } from '@/lib/utils/price';
 import axios from 'axios';
-import { Search, Filter, Sliders } from 'lucide-react';
+import { Search, Sliders, LocateFixed } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useFavorites } from '@/hooks/useFavorites';
 
 const usecases = {
   'Normal Stay': 'normal',
@@ -28,6 +29,7 @@ export default function ApartmentsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [reservationType, setReservationType] = useState<string>('normal');
   const [showFilters, setShowFilters] = useState(false);
+  const [locating, setLocating] = useState(false);
   const [filters, setFilters] = useState<FilterState>({
     state: '',
     city: '',
@@ -37,6 +39,7 @@ export default function ApartmentsPage() {
     sortOrder: 'desc',
   });
   const { user } = useAuth();
+  const { favoriteIds, pendingIds, toggleFavorite } = useFavorites();
   const router = useRouter();
 
   useEffect(() => {
@@ -299,6 +302,37 @@ export default function ApartmentsPage() {
   const hasActiveFilters = filters.state || filters.city || filters.numOfBeds || filters.priceRange || filters.sortBy;
   const { isCollapsed } = useSidebar();
 
+  const useMyLocation = async () => {
+    if (!navigator.geolocation) {
+      toast.error('Location is not supported by this browser.');
+      return;
+    }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      async ({ coords }) => {
+        try {
+          const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${coords.latitude}&lon=${coords.longitude}`, {
+            headers: { Accept: 'application/json' },
+          });
+          const result = await response.json();
+          const place = result?.address?.city || result?.address?.town || result?.address?.county || result?.address?.state;
+          if (!place) throw new Error('Location name unavailable');
+          setSearchQuery(place);
+          toast.success(`Showing stays around ${place}`);
+        } catch {
+          toast.error('We found your position but could not identify the town.');
+        } finally {
+          setLocating(false);
+        }
+      },
+      () => {
+        setLocating(false);
+        toast.error('Allow location access to find stays near you.');
+      },
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 }
+    );
+  };
+
   return (
     <div className="flex min-h-screen bg-gray-50 dark:bg-gray-900">
       <Sidebar />
@@ -340,6 +374,14 @@ export default function ApartmentsPage() {
                     {[filters.state, filters.city, filters.numOfBeds, filters.priceRange, filters.sortBy].filter(Boolean).length}
                   </span>
                 )}
+              </button>
+              <button
+                onClick={useMyLocation}
+                disabled={locating}
+                className="flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition hover:border-primary hover:text-primary disabled:opacity-60 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+              >
+                <LocateFixed size={18} className={locating ? 'animate-pulse' : ''} />
+                {locating ? 'Locating…' : 'Near me'}
               </button>
             </div>
 
@@ -392,6 +434,9 @@ export default function ApartmentsPage() {
                     key={apartment._id}
                     apartment={apartment}
                     reservationType={reservationType}
+                    isFavorite={favoriteIds.has(apartment._id)}
+                    favoritePending={pendingIds.has(apartment._id)}
+                    onToggleFavorite={toggleFavorite}
                   />
                 ))}
               </div>
