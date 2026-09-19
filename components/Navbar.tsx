@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
@@ -19,6 +19,8 @@ import AccountMenuDrawer from './AccountMenuDrawer';
 
 export default function Navbar() {
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const handleOpenDrawer = useCallback(() => setDrawerOpen(true), []);
+  const handleCloseDrawer = useCallback(() => setDrawerOpen(false), []);
   const pathname = usePathname();
   const { user, profile } = useAuth();
 
@@ -37,8 +39,9 @@ export default function Navbar() {
           {/* Left: Menu button & Brand Logo */}
           <div className="flex items-center gap-2 sm:gap-3 md:gap-4">
             <button
-              onClick={() => setDrawerOpen(true)}
-              className="p-2 sm:px-3 sm:py-2 rounded-xl border border-[#e7e8eb] dark:border-[#353c47] hover:border-[#ffbf00] dark:hover:border-[#ffbf00] bg-white dark:bg-[#1c222c] text-[#17191b] dark:text-[#f0f2f6] transition-colors focus:outline-none focus:ring-2 focus:ring-[#ffbf00]"
+              type="button"
+              onClick={handleOpenDrawer}
+              className="p-2 sm:px-3 sm:py-2 rounded-xl border border-[#e7e8eb] dark:border-[#353c47] hover:border-[#ffbf00] dark:hover:border-[#ffbf00] bg-white dark:bg-[#1c222c] text-[#17191b] dark:text-[#f0f2f6] transition-colors focus:outline-none focus:ring-2 focus:ring-[#ffbf00] cursor-pointer"
               aria-label="Open menu"
             >
               <Menu size={19} className="sm:w-5 sm:h-5" />
@@ -130,7 +133,7 @@ export default function Navbar() {
       </header>
 
       {/* Account Menu Drawer */}
-      <AccountMenuDrawer isOpen={drawerOpen} onClose={() => setDrawerOpen(false)} />
+      <AccountMenuDrawer isOpen={drawerOpen} onClose={handleCloseDrawer} />
     </>
   );
 }

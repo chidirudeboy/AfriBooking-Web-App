@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
@@ -36,11 +36,15 @@ export default function AccountMenuDrawer({ isOpen, onClose }: AccountMenuDrawer
   const router = useRouter();
   const { user, profile, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const prevPathname = useRef(pathname);
 
-  // Close on route change or ESC
+  // Close when user navigates to a different route
   useEffect(() => {
-    onClose();
-  }, [pathname, onClose]);
+    if (isOpen && prevPathname.current !== pathname) {
+      onClose();
+    }
+    prevPathname.current = pathname;
+  }, [pathname, isOpen, onClose]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -97,12 +101,12 @@ export default function AccountMenuDrawer({ isOpen, onClose }: AccountMenuDrawer
 
       {/* Drawer */}
       <aside
-        className="relative z-50 flex h-full w-[min(360px,88vw)] flex-col bg-white dark:bg-[#1c222c] text-[#17191b] dark:text-[#f0f2f6] shadow-2xl transition-transform duration-300 ease-in-out border-r border-[#e7e8eb] dark:border-[#353c47] overflow-y-auto"
+        className="relative z-50 flex h-full w-[min(360px,88vw)] flex-col bg-white dark:bg-[#1c222c] text-[#17191b] dark:text-[#f0f2f6] shadow-2xl transition-transform duration-300 ease-in-out border-r border-[#e7e8eb] dark:border-[#353c47] overflow-y-auto animate-slide-in-left"
         aria-label="Account menu"
       >
         {/* Drawer Header */}
         <div className="flex items-center justify-between p-5 border-b border-[#e7e8eb] dark:border-[#353c47]">
-          <Link href="/apartments" className="font-display font-extrabold text-2xl tracking-tight">
+          <Link href="/apartments" onClick={onClose} className="font-display font-extrabold text-2xl tracking-tight">
             Afri<span className="text-[#ffbf00]">Booking</span>
           </Link>
           <button
@@ -135,6 +139,7 @@ export default function AccountMenuDrawer({ isOpen, onClose }: AccountMenuDrawer
               <p className="text-sm font-medium mb-3 text-[#6c7075] dark:text-[#acb4c0]">Not signed in</p>
               <Link
                 href="/login"
+                onClick={onClose}
                 className="block w-full py-2.5 px-4 bg-[#ffbf00] hover:bg-[#eeb200] text-[#17191b] font-bold rounded-lg text-sm transition-colors text-center shadow-sm"
               >
                 Sign In
@@ -152,6 +157,7 @@ export default function AccountMenuDrawer({ isOpen, onClose }: AccountMenuDrawer
               <Link
                 key={item.name}
                 href={item.href}
+                onClick={onClose}
                 className={`flex items-center justify-between px-4 py-2.5 rounded-xl text-sm font-medium transition-colors ${
                   isActive
                     ? 'bg-[#ffbf00] text-[#17191b] font-semibold'
