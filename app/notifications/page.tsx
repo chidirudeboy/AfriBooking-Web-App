@@ -3,13 +3,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { useSidebar } from '@/contexts/SidebarContext';
-import Sidebar from '@/components/Sidebar';
+import AppShell from '@/components/AppShell';
 import { getAllNotification, markSingleNotificationRead, deleteSingleNotification, deleteSingleNotificationAlt, deleteSingleNotificationAlt2, deleteSingleNotificationAlt3, sendInspection } from '@/lib/endpoints';
 import axios from 'axios';
 import { Bell, Trash2, CheckCircle, X, Calendar, RefreshCw, Eye, EyeOff, Copy } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { format } from 'date-fns';
+import { safeFormat } from '@/lib/utils';
 
 interface Notification {
   id?: string;
@@ -56,7 +55,6 @@ const extractReleaseCode = (notification: Notification): string | null => {
 export default function NotificationsPage() {
   const router = useRouter();
   const { user } = useAuth();
-  const { isCollapsed } = useSidebar();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -248,23 +246,19 @@ export default function NotificationsPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen bg-gray-50 dark:bg-gray-900">
-        <Sidebar />
-        <div className={`flex-1 transition-all duration-300 ${isCollapsed ? 'lg:ml-20' : 'lg:ml-64'} flex items-center justify-center`}>
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      <AppShell width="max-w-5xl">
+        <div className="flex flex-col items-center justify-center py-24">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mb-4"></div>
+          <p className="text-gray-500 dark:text-gray-400 text-sm">Loading notifications...</p>
         </div>
-      </div>
+      </AppShell>
     );
   }
 
   return (
-    <div className="flex min-h-screen bg-gray-50 dark:bg-gray-900">
-      <Sidebar />
-      
-      <div className={`flex-1 transition-all duration-300 ${isCollapsed ? 'lg:ml-20' : 'lg:ml-64'}`}>
-        <main className="p-3 sm:p-4 lg:p-8">
-          {/* Header */}
-          <div className="mb-4 sm:mb-6 flex items-center justify-between">
+    <AppShell width="max-w-5xl">
+      {/* Header */}
+      <div className="mb-6 flex items-center justify-between">
             <div>
               <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-1 sm:mb-2">Notifications</h1>
               <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400">Stay updated with your booking activities</p>
@@ -399,7 +393,7 @@ export default function NotificationsPage() {
                               </p>
                               {createdAt && (
                                 <p className="text-xs sm:text-sm text-orange-500 dark:text-orange-400 mt-2">
-                                  {format(new Date(createdAt), 'MMM dd, yyyy h:mm a')}
+                                  {safeFormat(createdAt, 'MMM dd, yyyy h:mm a')}
                                 </p>
                               )}
                               {isReservationAccepted && (
@@ -494,8 +488,6 @@ export default function NotificationsPage() {
               })}
             </div>
           )}
-        </main>
-      </div>
-    </div>
+    </AppShell>
   );
 }

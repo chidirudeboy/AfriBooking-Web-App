@@ -10,26 +10,30 @@
     "build:prod": "next build",
     "start": "PORT_ENV_FILES=.env.production,.env.development.local DEFAULT_PORT=3000 node scripts/run-with-port.js next start",
     "lint": "next lint",
+    "test": "jest",
     "clear-cache": "rm -rf .next"
   },
   "dependencies": {
+    "axios": "^1.6.2",
+    "date-fns": "^4.1.0",
+    "lucide-react": "^0.344.0",
     "next": "14.2.35",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "axios": "^1.6.2",
-    "react-hot-toast": "^2.4.1",
-    "lucide-react": "^0.344.0",
-    "date-fns": "^4.1.0"
+    "react-hot-toast": "^2.4.1"
   },
   "devDependencies": {
+    "@types/jest": "^30.0.0",
     "@types/node": "^20.11.0",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
-    "typescript": "^5.3.3",
-    "tailwindcss": "^3.4.1",
-    "postcss": "^8.4.35",
     "autoprefixer": "^10.4.18",
     "eslint": "^8.57.0",
-    "eslint-config-next": "^14.2.0"
+    "eslint-config-next": "^14.2.0",
+    "jest": "^30.5.2",
+    "postcss": "^8.4.35",
+    "tailwindcss": "^3.4.1",
+    "ts-jest": "^29.4.12",
+    "typescript": "^5.3.3"
   }
 }

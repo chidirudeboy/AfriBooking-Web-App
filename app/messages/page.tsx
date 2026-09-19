@@ -3,13 +3,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { useSidebar } from '@/contexts/SidebarContext';
-import Sidebar from '@/components/Sidebar';
+import AppShell from '@/components/AppShell';
 import { getUserChats, getChatByBooking } from '@/lib/endpoints';
 import axios from 'axios';
 import { MessageSquare, RefreshCw, Send, ArrowLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format, formatDistanceToNow } from 'date-fns';
+import { safeFormat } from '@/lib/utils';
 
 interface Chat {
   _id: string;
@@ -63,7 +63,6 @@ interface Chat {
 export default function MessagesPage() {
   const router = useRouter();
   const { user } = useAuth();
-  const { isCollapsed } = useSidebar();
   const [chats, setChats] = useState<Chat[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -187,26 +186,19 @@ export default function MessagesPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen bg-gray-50 dark:bg-gray-900">
-        <Sidebar />
-        <div className={`flex-1 transition-all duration-300 ${isCollapsed ? 'lg:ml-20' : 'lg:ml-64'} flex items-center justify-center`}>
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-            <p className="text-gray-500 dark:text-gray-400">Loading messages...</p>
-          </div>
+      <AppShell width="max-w-5xl">
+        <div className="flex flex-col items-center justify-center py-24">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mb-4"></div>
+          <p className="text-gray-500 dark:text-gray-400 text-sm">Loading messages...</p>
         </div>
-      </div>
+      </AppShell>
     );
   }
 
   return (
-    <div className="flex min-h-screen bg-gray-50 dark:bg-gray-900">
-      <Sidebar />
-      
-      <div className={`flex-1 transition-all duration-300 ${isCollapsed ? 'lg:ml-20' : 'lg:ml-64'}`}>
-        <main className="p-3 sm:p-4 lg:p-8">
-          {/* Header */}
-          <div className="mb-4 sm:mb-6 flex items-center justify-between">
+    <AppShell width="max-w-5xl">
+      {/* Header */}
+      <div className="mb-6 flex items-center justify-between">
             <div>
               <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-1 sm:mb-2">Messages</h1>
               <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400">Chat with property owners</p>
@@ -308,7 +300,7 @@ export default function MessagesPage() {
                             )}
                             {chat.metadata?.checkInDate && chat.metadata?.checkOutDate && (
                               <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
-                                {format(new Date(chat.metadata.checkInDate), 'MMM dd')} - {format(new Date(chat.metadata.checkOutDate), 'MMM dd, yyyy')}
+                                {safeFormat(chat.metadata.checkInDate, 'MMM dd')} - {safeFormat(chat.metadata.checkOutDate, 'MMM dd, yyyy')}
                               </p>
                             )}
                           </div>
@@ -334,9 +326,7 @@ export default function MessagesPage() {
               })}
             </div>
           )}
-        </main>
-      </div>
-    </div>
+    </AppShell>
   );
 }
 

@@ -6,11 +6,11 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useSidebar } from '@/contexts/SidebarContext';
 import Sidebar from '@/components/Sidebar';
 import { ViewUserBookingHistory, getChatByBooking, createChatForBooking, getAllNotification, createBookingReview } from '@/lib/endpoints';
-import { numberWithCommas } from '@/lib/utils';
+import { numberWithCommas, safeFormat } from '@/lib/utils';
 import axios from 'axios';
 import { ArrowLeft, Home, Calendar, Home as HomeIcon, DollarSign, Info, History, MessageSquare, Eye, EyeOff, Copy, Key, X, Star } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { format, differenceInDays } from 'date-fns';
+import { differenceInDays } from 'date-fns';
 import RatingStars from '@/components/RatingStars';
 import api from '@/lib/utils/api';
 
@@ -296,8 +296,10 @@ export default function BookingDetailsPage() {
 
   const checkInDate = booking.checkInDate || booking.start_date;
   const checkOutDate = booking.checkOutDate || booking.end_date;
-  const duration = checkInDate && checkOutDate 
-    ? differenceInDays(new Date(checkOutDate), new Date(checkInDate))
+  const checkInParsed = checkInDate ? new Date(checkInDate) : null;
+  const checkOutParsed = checkOutDate ? new Date(checkOutDate) : null;
+  const duration = checkInParsed && checkOutParsed && !isNaN(checkInParsed.getTime()) && !isNaN(checkOutParsed.getTime())
+    ? differenceInDays(checkOutParsed, checkInParsed)
     : 0;
   const totalAmount = booking.amount || booking.pricing?.sellingPrice || booking.totalAmount || 0;
   const bookingId = booking._id || booking.id || '';
@@ -343,7 +345,7 @@ export default function BookingDetailsPage() {
                 <h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white mb-2">Booking Confirmation</h2>
                 {createdDate && (
                   <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400">
-                    Booked on {format(new Date(createdDate), 'MMM dd, yyyy')}
+                    Booked on {safeFormat(createdDate, 'MMM dd, yyyy')}
                   </p>
                 )}
               </div>
@@ -377,7 +379,7 @@ export default function BookingDetailsPage() {
                     <div className="flex flex-col sm:flex-row sm:justify-between gap-2">
                       <span className="text-sm sm:text-base font-medium text-gray-600 dark:text-gray-400">Check-in:</span>
                       <span className="text-sm sm:text-base text-gray-900 dark:text-white">
-                        {format(new Date(checkInDate), 'EEE, MMM dd, yyyy')}
+                        {safeFormat(checkInDate, 'EEE, MMM dd, yyyy')}
                       </span>
                     </div>
                   )}
@@ -385,7 +387,7 @@ export default function BookingDetailsPage() {
                     <div className="flex flex-col sm:flex-row sm:justify-between gap-2">
                       <span className="text-sm sm:text-base font-medium text-gray-600 dark:text-gray-400">Check-out:</span>
                       <span className="text-sm sm:text-base text-gray-900 dark:text-white">
-                        {format(new Date(checkOutDate), 'EEE, MMM dd, yyyy')}
+                        {safeFormat(checkOutDate, 'EEE, MMM dd, yyyy')}
                       </span>
                     </div>
                   )}

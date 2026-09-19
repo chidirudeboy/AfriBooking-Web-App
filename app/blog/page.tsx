@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import Image from 'next/image';
 import { getPublishedBlogs } from '@/lib/blog';
 
 export const dynamic = 'force-dynamic';
@@ -44,10 +45,12 @@ export default async function BlogPage() {
           >
             <div className="relative min-h-[280px] bg-slate-900">
               {featuredPost.coverImage ? (
-                <img
+                <Image
                   src={featuredPost.coverImage}
                   alt={featuredPost.title}
-                  className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.02]"
+                  fill
+                  sizes="(max-width: 1024px) 100vw, 60vw"
+                  className="object-cover transition duration-500 group-hover:scale-[1.02]"
                 />
               ) : (
                 <div className="flex h-full items-center justify-center bg-gradient-to-br from-amber-500/20 via-orange-500/10 to-transparent text-amber-100">
@@ -95,9 +98,15 @@ export default async function BlogPage() {
                 href={`/blog/${post.slug}`}
                 className="group overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] transition hover:border-amber-300/30 hover:bg-white/[0.06]"
               >
-                <div className="h-48 bg-slate-900">
+                <div className="relative h-48 bg-slate-900">
                   {post.coverImage ? (
-                    <img src={post.coverImage} alt={post.title} className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]" />
+                    <Image
+                      src={post.coverImage}
+                      alt={post.title}
+                      fill
+                      sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                      className="object-cover transition duration-500 group-hover:scale-[1.03]"
+                    />
                   ) : (
                     <div className="flex h-full items-center justify-center bg-gradient-to-br from-slate-800 to-slate-950 text-slate-400">
                       AfriBooking

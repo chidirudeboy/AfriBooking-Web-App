@@ -3,14 +3,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { useSidebar } from '@/contexts/SidebarContext';
-import Sidebar from '@/components/Sidebar';
+import AppShell from '@/components/AppShell';
 import { userBookingHistory, ViewUserBookingHistory } from '@/lib/endpoints';
-import { numberWithCommas } from '@/lib/utils';
+import { numberWithCommas, safeFormat } from '@/lib/utils';
 import axios from 'axios';
 import { Calendar, ChevronRight, RefreshCw, Home } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { format } from 'date-fns';
 
 interface Booking {
   _id: string;
@@ -42,7 +40,6 @@ interface Booking {
 export default function BookingsPage() {
   const router = useRouter();
   const { user } = useAuth();
-  const { isCollapsed } = useSidebar();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -173,26 +170,19 @@ export default function BookingsPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen bg-gray-50 dark:bg-gray-900">
-        <Sidebar />
-        <div className={`flex-1 transition-all duration-300 ${isCollapsed ? 'lg:ml-20' : 'lg:ml-64'} flex items-center justify-center`}>
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-            <p className="text-gray-500 dark:text-gray-400">Loading your bookings...</p>
-          </div>
+      <AppShell width="max-w-5xl">
+        <div className="flex flex-col items-center justify-center py-24">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mb-4"></div>
+          <p className="text-gray-500 dark:text-gray-400 text-sm">Loading your bookings...</p>
         </div>
-      </div>
+      </AppShell>
     );
   }
 
   return (
-    <div className="flex min-h-screen bg-gray-50 dark:bg-gray-900">
-      <Sidebar />
-      
-      <div className={`flex-1 transition-all duration-300 ${isCollapsed ? 'lg:ml-20' : 'lg:ml-64'}`}>
-        <main className="p-3 sm:p-4 lg:p-8">
-          {/* Header */}
-          <div className="mb-4 sm:mb-6 flex items-center justify-between">
+    <AppShell width="max-w-5xl">
+      {/* Header */}
+      <div className="mb-6 flex items-center justify-between">
             <div>
               <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-1 sm:mb-2">Booking History</h1>
               <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400">View all your past and upcoming bookings</p>
@@ -247,13 +237,13 @@ export default function BookingsPage() {
                         <div className="flex items-center text-sm sm:text-base text-gray-600 dark:text-gray-400 mb-2">
                           <Calendar size={16} className="mr-2 flex-shrink-0" />
                           <span>
-                            {format(new Date(booking.checkInDate), 'MMM dd')} - {format(new Date(booking.checkOutDate), 'MMM dd, yyyy')}
+                            {safeFormat(booking.checkInDate, 'MMM dd')} - {safeFormat(booking.checkOutDate, 'MMM dd, yyyy')}
                           </span>
                         </div>
                         
                         {created_at && (
                           <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mb-3">
-                            Booked on {format(new Date(created_at), 'MMM dd, yyyy')}
+                            Booked on {safeFormat(created_at, 'MMM dd, yyyy')}
                           </p>
                         )}
                         
@@ -279,9 +269,7 @@ export default function BookingsPage() {
               })}
             </div>
           )}
-        </main>
-      </div>
-    </div>
+    </AppShell>
   );
 }
 
