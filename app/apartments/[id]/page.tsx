@@ -3,9 +3,9 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Image from 'next/image';
+import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
-import { useSidebar } from '@/contexts/SidebarContext';
-import Sidebar from '@/components/Sidebar';
+import AppShell from '@/components/AppShell';
 import { TApartments, TOptionalFees } from '@/lib/types/airbnb';
 import { getEveryApartments, getSingleApartmentUserDetails, paymentHistory, cancelReservation } from '@/lib/endpoints';
 import { numberWithCommas } from '@/lib/utils';
@@ -758,35 +758,29 @@ export default function ApartmentDetailsPage() {
     }
   };
 
-  const { isCollapsed } = useSidebar();
-
   if (loading) {
     return (
-      <div className="flex min-h-screen bg-gray-50 dark:bg-gray-900">
-        <Sidebar />
-        <div className={`flex-1 transition-all duration-300 ${isCollapsed ? 'lg:ml-20' : 'lg:ml-64'} flex items-center justify-center`}>
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      <AppShell>
+        <div className="flex items-center justify-center py-24">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#ffbf00]"></div>
         </div>
-      </div>
+      </AppShell>
     );
   }
 
   if (!apartment) {
     return (
-      <div className="flex min-h-screen bg-gray-50 dark:bg-gray-900">
-        <Sidebar />
-        <div className={`flex-1 transition-all duration-300 ${isCollapsed ? 'lg:ml-20' : 'lg:ml-64'} flex items-center justify-center`}>
-          <div className="text-center">
-            <p className="text-gray-500 dark:text-gray-400 text-lg">Apartment not found</p>
-            <button
-              onClick={() => router.push('/apartments')}
-              className="mt-4 text-primary hover:underline"
-            >
-              Back to Apartments
-            </button>
-          </div>
+      <AppShell>
+        <div className="text-center py-24">
+          <p className="text-gray-500 dark:text-gray-400 text-lg">Apartment not found</p>
+          <button
+            onClick={() => router.push('/apartments')}
+            className="mt-4 text-[#896300] dark:text-[#ffbf00] font-semibold hover:underline"
+          >
+            Back to Apartments
+          </button>
         </div>
-      </div>
+      </AppShell>
     );
   }
 
@@ -795,19 +789,27 @@ export default function ApartmentDetailsPage() {
   const currentMedia = mediaItems[currentImageIndex] || { type: 'image', uri: fallbackImage };
 
   return (
-    <div className="flex min-h-screen bg-gray-50 dark:bg-gray-900 overflow-x-hidden">
-      <Sidebar />
-      
-      <div className={`flex-1 transition-all duration-300 ${isCollapsed ? 'lg:ml-20' : 'lg:ml-64'} w-0 min-w-0`}>
-        <main className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8 py-4 sm:py-6 w-full overflow-x-hidden">
-          {/* Back Button */}
-          <button
-            onClick={() => router.back()}
-            className="mb-3 sm:mb-4 flex items-center text-sm sm:text-base text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
-          >
-            <ArrowLeft size={18} className="sm:w-5 sm:h-5 mr-2" />
-            Back
-          </button>
+    <>
+      <AppShell width="max-w-[1320px]">
+        {/* Breadcrumbs */}
+        <div className="text-xs sm:text-sm text-[#6c7075] dark:text-[#acb4c0] mb-4 flex items-center gap-2">
+          <Link href="/apartments" className="hover:text-[#17191b] dark:hover:text-white transition-colors">
+            Discover
+          </Link>
+          <span>/</span>
+          <span>{apartment.city || 'Nigeria'}</span>
+          <span>/</span>
+          <span className="text-[#17191b] dark:text-white font-medium truncate">{apartment.apartmentName}</span>
+        </div>
+
+        {/* Back Button */}
+        <button
+          onClick={() => router.back()}
+          className="mb-3 sm:mb-4 flex items-center text-sm font-semibold text-[#6c7075] dark:text-[#acb4c0] hover:text-[#17191b] dark:hover:text-white"
+        >
+          <ArrowLeft size={16} className="mr-1.5" />
+          Back
+        </button>
 
           {/* Media Carousel (Images and Videos) */}
           <div className="relative w-full h-64 sm:h-80 md:h-96 lg:h-[500px] rounded-lg overflow-hidden mb-4 sm:mb-6 bg-gray-200 dark:bg-gray-700">
@@ -1279,11 +1281,10 @@ export default function ApartmentDetailsPage() {
                     <p className="text-sm text-red-700 dark:text-red-400 font-medium">This apartment is currently booked</p>
                   </div>
                 )}
-              </div>
             </div>
           </div>
-        </main>
-      </div>
+        </div>
+      </AppShell>
 
       {/* Media Modal */}
       <MediaModal
@@ -1292,6 +1293,6 @@ export default function ApartmentDetailsPage() {
         mediaItems={mediaItems}
         initialIndex={currentImageIndex}
       />
-    </div>
+    </>
   );
 }

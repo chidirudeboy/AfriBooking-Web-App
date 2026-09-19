@@ -3,8 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { useSidebar } from '@/contexts/SidebarContext';
-import Sidebar from '@/components/Sidebar';
+import AppShell from '@/components/AppShell';
 import { userBookingHistory, ViewUserBookingHistory } from '@/lib/endpoints';
 import { numberWithCommas, safeFormat } from '@/lib/utils';
 import axios from 'axios';
@@ -41,7 +40,6 @@ interface Booking {
 export default function BookingsPage() {
   const router = useRouter();
   const { user } = useAuth();
-  const { isCollapsed } = useSidebar();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -172,26 +170,19 @@ export default function BookingsPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen bg-gray-50 dark:bg-gray-900">
-        <Sidebar />
-        <div className={`flex-1 transition-all duration-300 ${isCollapsed ? 'lg:ml-20' : 'lg:ml-64'} flex items-center justify-center`}>
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-            <p className="text-gray-500 dark:text-gray-400">Loading your bookings...</p>
-          </div>
+      <AppShell width="max-w-5xl">
+        <div className="flex flex-col items-center justify-center py-24">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mb-4"></div>
+          <p className="text-gray-500 dark:text-gray-400 text-sm">Loading your bookings...</p>
         </div>
-      </div>
+      </AppShell>
     );
   }
 
   return (
-    <div className="flex min-h-screen bg-gray-50 dark:bg-gray-900">
-      <Sidebar />
-      
-      <div className={`flex-1 transition-all duration-300 ${isCollapsed ? 'lg:ml-20' : 'lg:ml-64'}`}>
-        <main className="p-3 sm:p-4 lg:p-8">
-          {/* Header */}
-          <div className="mb-4 sm:mb-6 flex items-center justify-between">
+    <AppShell width="max-w-5xl">
+      {/* Header */}
+      <div className="mb-6 flex items-center justify-between">
             <div>
               <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-1 sm:mb-2">Booking History</h1>
               <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400">View all your past and upcoming bookings</p>
@@ -278,9 +269,7 @@ export default function BookingsPage() {
               })}
             </div>
           )}
-        </main>
-      </div>
-    </div>
+    </AppShell>
   );
 }
 

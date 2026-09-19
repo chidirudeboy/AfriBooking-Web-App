@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from 'next'
-import { Inter } from 'next/font/google'
 import './globals.css'
 import { AuthProvider } from '@/contexts/AuthContext'
 import { SidebarProvider } from '@/contexts/SidebarContext'
@@ -12,11 +11,9 @@ import Analytics from '@/components/Analytics'
 import OnboardingExperience from '@/components/OnboardingExperience'
 import BrowserNotificationBridge from '@/components/BrowserNotificationBridge'
 
-const inter = Inter({ subsets: ['latin'] })
-
 export const metadata: Metadata = {
-  title: 'AfriBooking: Find & Book',
-  description: 'Find and book apartments with AfriBooking',
+  title: 'AfriBooking — Discover your next destination',
+  description: 'Find your stay. Make room for experiences. Apartments, Spaces, Experiences, and Transport across Nigeria.',
 }
 
 export const viewport: Viewport = {
@@ -37,9 +34,11 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <GoogleTagManagerHead />
       </head>
-      <body className={inter.className}>
+      <body className="font-sans bg-white dark:bg-[#141922] text-[#17191b] dark:text-[#f0f2f6] min-h-screen antialiased">
         <GoogleTagManagerBody />
         <ThemeWrapper>
           <AuthProvider>

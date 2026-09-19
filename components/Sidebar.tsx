@@ -27,11 +27,13 @@ import {
   Heart,
   Tags,
   Gift,
-  Clapperboard
+  Clapperboard,
+  Sparkles,
 } from 'lucide-react';
 
 const navigation = [
   { name: 'Apartments', href: '/apartments', icon: Home },
+  { name: 'Plan a trip', href: '/planner', icon: Sparkles },
   { name: 'Saved stays', href: '/saved', icon: Heart },
   { name: 'My offers', href: '/bargains', icon: Tags },
   { name: 'Reels', href: '/reels', icon: Clapperboard },
@@ -97,13 +99,15 @@ export default function Sidebar() {
           {/* Logo/Brand */}
           <div className={`p-4 sm:p-6 border-b border-gray-200 dark:border-gray-700 relative ${isCollapsed ? 'px-2' : ''}`}>
             {!isCollapsed ? (
-              <>
-                <h1 className="text-xl sm:text-2xl font-bold text-primary">AfriBooking</h1>
-                <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">Find & Book</p>
-              </>
+              <Link href="/apartments" className="block">
+                <span className="font-display font-extrabold text-2xl tracking-tight text-[#17191b] dark:text-[#f0f2f6]">
+                  Afri<span className="text-[#ffbf00]">Booking</span>
+                </span>
+                <p className="text-[10px] font-semibold tracking-wider text-[#6c7075] dark:text-[#acb4c0] uppercase">Find & Book</p>
+              </Link>
             ) : (
               <div className="flex items-center justify-center">
-                <h1 className="text-lg font-bold text-primary">A</h1>
+                <span className="font-display text-xl font-black text-[#ffbf00]">A</span>
               </div>
             )}
             {/* Collapse Toggle Button - Desktop only */}
@@ -185,8 +189,8 @@ export default function Sidebar() {
                           : 'space-x-3 px-4 py-3'
                         }
                         ${isActive
-                          ? 'bg-primary text-white'
-                          : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
+                          ? 'bg-[#ffbf00] text-[#17191b] font-semibold shadow-sm'
+                          : 'text-[#17191b] dark:text-[#f0f2f6] hover:bg-gray-100 dark:hover:bg-gray-800'
                         }
                       `}
                       title={isCollapsed ? item.name : undefined}

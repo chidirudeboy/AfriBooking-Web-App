@@ -5,7 +5,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { TApartments } from '@/lib/types/airbnb';
 import { numberWithCommas } from '@/lib/utils';
-import { MapPin, Bed, Bath, Users, Play, Heart, Star } from 'lucide-react';
+import { MapPin, MessageSquare, Play, Heart } from 'lucide-react';
 import { getPrice as calculatePrice } from '@/lib/utils/price';
 
 interface ApartmentCardProps {
@@ -16,7 +16,13 @@ interface ApartmentCardProps {
   onToggleFavorite?: (apartmentId: string) => void;
 }
 
-export default function ApartmentCard({ apartment, reservationType = 'normal', isFavorite = false, favoritePending = false, onToggleFavorite }: ApartmentCardProps) {
+export default function ApartmentCard({
+  apartment,
+  reservationType = 'normal',
+  isFavorite = false,
+  favoritePending = false,
+  onToggleFavorite,
+}: ApartmentCardProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   // Get primary image
@@ -40,14 +46,15 @@ export default function ApartmentCard({ apartment, reservationType = 'normal', i
     }
 
     const firstImageData = apartment.media?.images?.[0];
-    const firstImage = typeof firstImageData === 'string'
-      ? firstImageData
-      : firstImageData && typeof firstImageData === 'object'
+    const firstImage =
+      typeof firstImageData === 'string'
+        ? firstImageData
+        : firstImageData && typeof firstImageData === 'object'
         ? firstImageData.uri || firstImageData.url || null
         : null;
 
-    // Fallback image as data URI to avoid external network calls
-    const defaultFallbackImage = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTAwIiBoZWlnaHQ9IjM4MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNTAwIiBoZWlnaHQ9IjM4MCIgZmlsbD0iI2YzZjRmNiIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMjAiIGZpbGw9IiM5Y2EzYWYiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5ObyBJbWFnZTwvdGV4dD48L3N2Zz4=';
+    const defaultFallbackImage =
+      'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTAwIiBoZWlnaHQ9IjM4MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNTAwIiBoZWlnaHQ9IjM4MCIgZmlsbD0iI2YzZjRmNiIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMjAiIGZpbGw9IiM5Y2EzYWYiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5ObyBJbWFnZTwvdGV4dD48L3N2Zz4=';
     return reelImage || firstImage || defaultFallbackImage;
   };
 
@@ -66,11 +73,24 @@ export default function ApartmentCard({ apartment, reservationType = 'normal', i
   const reviewCount = Number(apartment.totalReviews || 0);
   const rating = Number(apartment.averageRating || 0);
 
+  // Property type badge label
+  const typeBadge =
+    (apartment as any).propertyType ||
+    (apartment.bedrooms >= 4 ? 'Entire Home' : apartment.bedrooms >= 2 ? 'Apartments' : 'Studio');
+
+  // Tag pill
+  const tagLabel =
+    apartment.optionalFees?.photoShootFee
+      ? 'Stay & photo shoot'
+      : reservationType === 'party'
+      ? 'Party allowed'
+      : 'Stay';
+
   return (
-    <article className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-sm ring-1 ring-gray-200 dark:ring-gray-700 overflow-hidden hover:-translate-y-0.5 hover:shadow-xl dark:hover:shadow-black/30 transition-all duration-300">
-      <Link href={`/apartments/${apartment._id}`} className="block focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary">
-        {/* Media */}
-        <div className="relative w-full h-64 bg-gray-200 dark:bg-gray-700">
+    <article className="group relative bg-white dark:bg-[#1c222c] rounded-2xl border border-[#e7e8eb] dark:border-[#353c47] overflow-hidden hover:shadow-lg transition-all duration-300">
+      {/* Photo / Media Container */}
+      <div className="relative w-full h-[235px] sm:h-[240px] overflow-hidden bg-gray-100 dark:bg-gray-800">
+        <Link href={`/apartments/${apartment._id}`} className="block w-full h-full">
           {primaryVideo ? (
             <>
               <video
@@ -79,25 +99,18 @@ export default function ApartmentCard({ apartment, reservationType = 'normal', i
                 muted
                 playsInline
                 preload="metadata"
-                className="absolute inset-0 w-full h-full object-cover"
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                 onLoadedMetadata={() => {
                   if (videoRef.current) videoRef.current.currentTime = 1;
                 }}
               />
               <div
-                className="absolute inset-0 flex flex-col items-center justify-center"
+                className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none"
                 style={{ backgroundColor: 'rgba(0,0,0,0.35)' }}
               >
-                <div
-                  className="w-16 h-16 rounded-full flex items-center justify-center mb-3"
-                  style={{ backgroundColor: 'rgba(250,208,0,0.95)' }}
-                >
-                  <Play size={32} color="#000" fill="#000" />
+                <div className="w-12 h-12 rounded-full flex items-center justify-center bg-[#ffbf00] text-[#17191b] shadow-md">
+                  <Play size={24} className="ml-0.5 fill-current" />
                 </div>
-                <p className="text-white font-bold text-base text-center px-4">Video preview available</p>
-                <p className="text-sm text-center mt-1 px-4" style={{ color: 'rgba(255,255,255,0.92)' }}>
-                  Tap to watch the apartment tour
-                </p>
               </div>
             </>
           ) : (
@@ -105,78 +118,107 @@ export default function ApartmentCard({ apartment, reservationType = 'normal', i
               src={imageUrl}
               alt={apartment.apartmentName}
               fill
-              className="object-cover"
+              className="object-cover group-hover:scale-105 transition-transform duration-500"
               sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
             />
           )}
-          {apartment.isBooked && (
-            <div className="absolute top-3 left-3 bg-red-500 text-white px-3 py-1 rounded-full text-xs font-semibold shadow-sm">
-              Booked
-            </div>
+        </Link>
+
+        {/* Favorite Save Button */}
+        {onToggleFavorite && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onToggleFavorite(apartment._id);
+            }}
+            disabled={favoritePending}
+            className="absolute top-3.5 right-3.5 z-10 w-[34px] h-[34px] rounded-full bg-white/95 dark:bg-[#1c222c]/90 text-[#17191b] dark:text-white shadow-md flex items-center justify-center hover:scale-110 active:scale-95 transition-all disabled:opacity-60"
+            aria-label={isFavorite ? 'Unsave listing' : 'Save listing'}
+          >
+            <Heart
+              size={18}
+              className={isFavorite ? 'fill-[#c58d00] text-[#c58d00]' : 'stroke-[2] text-gray-700 dark:text-gray-200'}
+            />
+          </button>
+        )}
+
+        {/* Type Badge */}
+        <span className="absolute bottom-3 left-3.5 z-10 bg-white/95 dark:bg-[#17191b]/90 text-[#17191b] dark:text-[#f0f2f6] px-2.5 py-1 rounded-md text-[11px] font-semibold tracking-wide shadow-sm">
+          {typeBadge}
+        </span>
+
+        {apartment.isBooked && (
+          <div className="absolute top-3.5 left-3.5 z-10 bg-rose-500 text-white px-2.5 py-0.5 rounded-full text-xs font-semibold shadow-sm">
+            Booked
+          </div>
+        )}
+      </div>
+
+      {/* Card Body */}
+      <div className="p-[18px]">
+        {/* Title */}
+        <Link
+          href={`/apartments/${apartment._id}`}
+          className="font-display font-bold text-[17px] text-[#17191b] dark:text-[#f0f2f6] hover:text-[#eeb200] line-clamp-1 tracking-tight"
+        >
+          {apartment.apartmentName}
+        </Link>
+
+        {/* Location */}
+        <p className="flex items-center text-[13px] text-[#6c7075] dark:text-[#acb4c0] mt-1 mb-1.5">
+          <MapPin size={14} className="mr-1.5 shrink-0 text-[#ffbf00]" />
+          <span className="line-clamp-1">
+            {(apartment as any).area || apartment.address}, {apartment.city}
+          </span>
+        </p>
+
+        {/* Rating */}
+        <div className="text-[13px] mb-2 flex items-center gap-1.5">
+          {reviewCount > 0 || rating > 0 ? (
+            <>
+              <span className="text-[#da9b00] font-bold text-sm">★</span>
+              <span className="font-semibold text-[#17191b] dark:text-[#f0f2f6]">
+                {rating > 0 ? rating.toFixed(1) : '5.0'}
+              </span>
+              <span className="text-[#6c7075] dark:text-[#acb4c0] text-xs">
+                ({reviewCount} {reviewCount === 1 ? 'review' : 'reviews'})
+              </span>
+            </>
+          ) : (
+            <span className="text-[#6c7075] dark:text-[#acb4c0] text-xs">New listing</span>
           )}
         </div>
 
-        {/* Content */}
-        <div className="p-4">
-          <div className="mb-2 flex items-start justify-between gap-3">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white line-clamp-1">{apartment.apartmentName}</h3>
-            {reviewCount > 0 && (
-              <span className="flex shrink-0 items-center gap-1 text-sm font-semibold text-gray-800 dark:text-gray-100">
-                <Star size={15} className="fill-amber-400 text-amber-400" /> {rating.toFixed(1)}
-              </span>
-            )}
-          </div>
-
-          <div className="flex items-center text-gray-600 dark:text-gray-400 text-sm mb-3">
-            <MapPin size={16} className="mr-1" />
-            <span className="line-clamp-1">
-              {apartment.address}, {apartment.city}, {apartment.state}
-            </span>
-          </div>
-
-          <div className="flex items-center space-x-4 text-gray-600 dark:text-gray-400 text-sm mb-3">
-            <div className="flex items-center">
-              <Bed size={16} className="mr-1" />
-              <span>{apartment.bedrooms} Bed</span>
-            </div>
-            <div className="flex items-center">
-              <Bath size={16} className="mr-1" />
-              <span>{apartment.bathrooms} Bath</span>
-            </div>
-            <div className="flex items-center">
-              <Users size={16} className="mr-1" />
-              <span>{apartment.guests} Guests</span>
-            </div>
-          </div>
-
-          <p className="text-gray-600 dark:text-gray-400 text-sm mb-3 line-clamp-2">
-            {apartment.description}
-          </p>
-
-          <div className="flex items-center justify-between pt-3 border-t border-gray-200 dark:border-gray-700">
-            <div>
-              <span className="text-2xl font-bold text-primary">
-                ₦{numberWithCommas(price)}
-              </span>
-              <span className="text-gray-500 dark:text-gray-400 text-sm ml-1">/night</span>
-            </div>
-            <button className="text-primary hover:text-primary-dark font-medium text-sm">
-              View Details →
-            </button>
-          </div>
+        {/* Meta Line */}
+        <div className="text-xs text-[#6c7075] dark:text-[#acb4c0] mb-3">
+          {apartment.bedrooms} {apartment.bedrooms === 1 ? 'bedroom' : 'bedrooms'} ·{' '}
+          {apartment.bathrooms || 1} {apartment.bathrooms === 1 ? 'bath' : 'baths'} · {apartment.guests} guests
         </div>
-      </Link>
-      {onToggleFavorite && (
-        <button
-          type="button"
-          onClick={() => onToggleFavorite(apartment._id)}
-          disabled={favoritePending}
-          className="absolute right-3 top-3 z-10 grid h-11 w-11 place-items-center rounded-full bg-white/95 text-gray-900 shadow-lg backdrop-blur transition hover:scale-105 disabled:opacity-60 dark:bg-gray-900/90 dark:text-white"
-          aria-label={isFavorite ? 'Remove from saved stays' : 'Save apartment'}
+
+        {/* Message Owner Direct Link */}
+        <Link
+          href={`/messages?apartmentId=${apartment._id}`}
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#946a00] dark:text-[#efc353] hover:underline mb-4"
         >
-          <Heart size={21} className={isFavorite ? 'fill-rose-500 text-rose-500' : ''} />
-        </button>
-      )}
+          <MessageSquare size={14} />
+          <span>Message owner</span>
+        </Link>
+
+        {/* Card Bottom Row */}
+        <div className="border-t border-[#e7e8eb] dark:border-[#353c47] pt-3 flex items-center justify-between">
+          <div className="text-xs text-[#6c7075] dark:text-[#acb4c0]">
+            <strong className="text-lg sm:text-[20px] font-extrabold text-[#17191b] dark:text-white mr-1 tracking-tight">
+              ₦{numberWithCommas(price)}
+            </strong>
+            / night
+          </div>
+          <span className="bg-[#fff9e9] dark:bg-[#302916] text-[#5a4920] dark:text-[#ffbf00] px-2.5 py-1 rounded-md text-[11px] font-semibold">
+            {tagLabel}
+          </span>
+        </div>
+      </div>
     </article>
   );
 }
