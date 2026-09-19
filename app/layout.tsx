@@ -9,6 +9,8 @@ import AppUpdateBanner from '@/components/AppUpdateBanner'
 import { Toaster } from 'react-hot-toast'
 import { GoogleTagManagerHead, GoogleTagManagerBody } from '@/components/GoogleTagManager'
 import Analytics from '@/components/Analytics'
+import OnboardingExperience from '@/components/OnboardingExperience'
+import BrowserNotificationBridge from '@/components/BrowserNotificationBridge'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -44,6 +46,8 @@ export default function RootLayout({
             <SidebarProvider>
               <AppUpdateBanner />
               <Analytics />
+              <OnboardingExperience />
+              <BrowserNotificationBridge />
               {children}
               <SessionWarning />
               <Toaster 

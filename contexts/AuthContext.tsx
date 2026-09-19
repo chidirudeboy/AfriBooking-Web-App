@@ -247,7 +247,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         await getProfile(userResponse.token);
         
         toast.success('Login Successful');
-        router.push('/apartments');
+        const returnTo = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('returnTo') : null;
+        router.push(returnTo?.startsWith('/') && !returnTo.startsWith('//') ? returnTo : '/apartments');
       } else {
         toast.error(response.data.message || 'Login failed');
         setError(response.data.message || 'Login failed');
@@ -334,9 +335,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           } catch {
             // ignore
           }
-          router.push(`/verify-email?email=${encodeURIComponent(email)}`);
+          router.push(`/verify-email?email=${encodeURIComponent(email)}&phone=${encodeURIComponent(phoneNumber)}`);
         } else {
-          router.push('/apartments');
+          router.push(`/verify-phone?email=${encodeURIComponent(email)}&phone=${encodeURIComponent(phoneNumber)}`);
         }
       } else {
         toast.error(response.data.message || 'Registration failed');

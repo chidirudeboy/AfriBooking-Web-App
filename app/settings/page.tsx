@@ -13,7 +13,8 @@ import {
   LogOut, 
   Trash2,
   ChevronRight,
-  AlertCircle
+  AlertCircle,
+  Bell
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -67,6 +68,11 @@ export default function SettingsPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
   const [showPasswordInput, setShowPasswordInput] = useState(false);
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | 'unsupported'>('default');
+
+  useEffect(() => {
+    setNotificationPermission(typeof Notification === 'undefined' ? 'unsupported' : Notification.permission);
+  }, []);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -93,6 +99,20 @@ export default function SettingsPage() {
 
   const handleEULA = () => {
     window.open('https://termify.io/terms-and-conditions/GuDn0fVx1P', '_blank');
+  };
+
+  const handleNotifications = async () => {
+    if (typeof Notification === 'undefined') {
+      toast.error('Browser notifications are not supported on this device.');
+      return;
+    }
+    if (Notification.permission === 'denied') {
+      toast.error('Notifications are blocked. Enable them from your browser site settings.');
+      return;
+    }
+    const permission = await Notification.requestPermission();
+    setNotificationPermission(permission);
+    if (permission === 'granted') toast.success('Browser notifications are on.');
   };
 
   return (
@@ -138,6 +158,11 @@ export default function SettingsPage() {
                 label="Support"
                 icon={<Headphones size={18} />}
                 onClick={() => router.push('/support')}
+              />
+              <SettingsItem
+                label={notificationPermission === 'granted' ? 'Browser notifications · On' : 'Enable browser notifications'}
+                icon={<Bell size={18} />}
+                onClick={handleNotifications}
               />
               <SettingsItem
                 label="Sign out"
