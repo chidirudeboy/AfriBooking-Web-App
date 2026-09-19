@@ -9,6 +9,7 @@ import Sidebar from '@/components/Sidebar';
 import { TApartments, TOptionalFees } from '@/lib/types/airbnb';
 import { getEveryApartments, getSingleApartmentUserDetails, paymentHistory, cancelReservation } from '@/lib/endpoints';
 import { numberWithCommas } from '@/lib/utils';
+import { config } from '@/lib/config/environment';
 import { getPrice } from '@/lib/utils/price';
 import axios from 'axios';
 import { 
@@ -212,7 +213,7 @@ export default function ApartmentDetailsPage() {
 
       console.log('🔍 Searching for reservationId in booking history...');
       const response = await fetch(
-        `https://api.africartz.com/api/bookings/user/history?page=1&limit=100&status=pending,accepted,declined&startDate=${today}&endDate=${futureDate}`,
+        `${config.baseUrl}/bookings/user/history?page=1&limit=100&status=pending,accepted,declined&startDate=${today}&endDate=${futureDate}`,
         {
           method: 'GET',
           headers: {

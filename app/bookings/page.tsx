@@ -6,11 +6,10 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useSidebar } from '@/contexts/SidebarContext';
 import Sidebar from '@/components/Sidebar';
 import { userBookingHistory, ViewUserBookingHistory } from '@/lib/endpoints';
-import { numberWithCommas } from '@/lib/utils';
+import { numberWithCommas, safeFormat } from '@/lib/utils';
 import axios from 'axios';
 import { Calendar, ChevronRight, RefreshCw, Home } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { format } from 'date-fns';
 
 interface Booking {
   _id: string;
@@ -247,13 +246,13 @@ export default function BookingsPage() {
                         <div className="flex items-center text-sm sm:text-base text-gray-600 dark:text-gray-400 mb-2">
                           <Calendar size={16} className="mr-2 flex-shrink-0" />
                           <span>
-                            {format(new Date(booking.checkInDate), 'MMM dd')} - {format(new Date(booking.checkOutDate), 'MMM dd, yyyy')}
+                            {safeFormat(booking.checkInDate, 'MMM dd')} - {safeFormat(booking.checkOutDate, 'MMM dd, yyyy')}
                           </span>
                         </div>
                         
                         {created_at && (
                           <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mb-3">
-                            Booked on {format(new Date(created_at), 'MMM dd, yyyy')}
+                            Booked on {safeFormat(created_at, 'MMM dd, yyyy')}
                           </p>
                         )}
                         

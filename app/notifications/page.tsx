@@ -9,7 +9,7 @@ import { getAllNotification, markSingleNotificationRead, deleteSingleNotificatio
 import axios from 'axios';
 import { Bell, Trash2, CheckCircle, X, Calendar, RefreshCw, Eye, EyeOff, Copy } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { format } from 'date-fns';
+import { safeFormat } from '@/lib/utils';
 
 interface Notification {
   id?: string;
@@ -399,7 +399,7 @@ export default function NotificationsPage() {
                               </p>
                               {createdAt && (
                                 <p className="text-xs sm:text-sm text-orange-500 dark:text-orange-400 mt-2">
-                                  {format(new Date(createdAt), 'MMM dd, yyyy h:mm a')}
+                                  {safeFormat(createdAt, 'MMM dd, yyyy h:mm a')}
                                 </p>
                               )}
                               {isReservationAccepted && (

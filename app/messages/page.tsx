@@ -10,6 +10,7 @@ import axios from 'axios';
 import { MessageSquare, RefreshCw, Send, ArrowLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format, formatDistanceToNow } from 'date-fns';
+import { safeFormat } from '@/lib/utils';
 
 interface Chat {
   _id: string;
@@ -308,7 +309,7 @@ export default function MessagesPage() {
                             )}
                             {chat.metadata?.checkInDate && chat.metadata?.checkOutDate && (
                               <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
-                                {format(new Date(chat.metadata.checkInDate), 'MMM dd')} - {format(new Date(chat.metadata.checkOutDate), 'MMM dd, yyyy')}
+                                {safeFormat(chat.metadata.checkInDate, 'MMM dd')} - {safeFormat(chat.metadata.checkOutDate, 'MMM dd, yyyy')}
                               </p>
                             )}
                           </div>

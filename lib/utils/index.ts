@@ -1,3 +1,12 @@
+import { format } from 'date-fns';
+
+export function safeFormat(value: string | undefined | null, fmt: string, fallback = '—'): string {
+  if (!value) return fallback;
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return fallback;
+  return format(d, fmt);
+}
+
 export const isEmpty = (value: any): boolean => {
   if (value === null || value === undefined) return true;
   if (typeof value === 'string') return value.trim().length === 0;

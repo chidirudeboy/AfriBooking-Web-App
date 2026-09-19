@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format, differenceInDays, differenceInHours, differenceInMinutes, parseISO } from 'date-fns';
+import { safeFormat } from '@/lib/utils';
 
 interface UserRequest {
   id: string;
@@ -263,7 +264,7 @@ export default function MyRequestsPage() {
                               CHECK-IN
                             </p>
                             <p className="text-xs font-semibold text-gray-900 dark:text-white">
-                              {format(parseISO(request.checkInDate), 'MMM d')}
+                              {safeFormat(request.checkInDate, 'MMM d')}
                             </p>
                           </div>
                         )}
@@ -276,7 +277,7 @@ export default function MyRequestsPage() {
                               CHECK-OUT
                             </p>
                             <p className="text-xs font-semibold text-gray-900 dark:text-white">
-                              {format(parseISO(request.checkOutDate), 'MMM d')}
+                              {safeFormat(request.checkOutDate, 'MMM d')}
                             </p>
                           </div>
                         )}
