@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import AppShell from '@/components/AppShell';
@@ -44,7 +45,6 @@ const browseCategories = [
 
 export default function ApartmentsPage() {
   const [apartments, setApartments] = useState<TApartments[]>([]);
-  const [filteredApartments, setFilteredApartments] = useState<TApartments[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'Stays' | 'Spaces' | 'Experiences' | 'Transport'>('Stays');
   const [searchQuery, setSearchQuery] = useState('');
@@ -71,10 +71,6 @@ export default function ApartmentsPage() {
   useEffect(() => {
     fetchApartments();
   }, []);
-
-  useEffect(() => {
-    filterApartments();
-  }, [searchQuery, destination, reservationType, apartments, filters]);
 
   const fetchApartments = async () => {
     try {
@@ -113,7 +109,6 @@ export default function ApartmentsPage() {
 
       if (results && results.length > 0) {
         setApartments(results);
-        setFilteredApartments(results);
       } else {
         toast.error('No apartments found');
       }
@@ -131,7 +126,7 @@ export default function ApartmentsPage() {
     }
   };
 
-  const filterApartments = () => {
+  const filteredApartments = useMemo(() => {
     let filtered = [...apartments];
 
     // Destination dropdown filter
@@ -243,8 +238,8 @@ export default function ApartmentsPage() {
       });
     }
 
-    setFilteredApartments(filtered);
-  };
+    return filtered;
+  }, [apartments, destination, searchQuery, reservationType, filters]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -252,7 +247,6 @@ export default function ApartmentsPage() {
       toast.error('Choose a check-out date after check-in.');
       return;
     }
-    filterApartments();
     const resultsElement = document.getElementById('results-section');
     if (resultsElement) {
       resultsElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -500,10 +494,12 @@ export default function ApartmentsPage() {
               }}
               className="group relative flex-shrink-0 w-[140px] sm:w-auto h-28 sm:h-32 rounded-xl overflow-hidden text-left focus:outline-none focus:ring-2 focus:ring-[#ffbf00]"
             >
-              <img
+              <Image
                 src={cat.image}
                 alt={cat.name}
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                fill
+                sizes="(max-width: 640px) 140px, (max-width: 768px) 33vw, 20vw"
+                className="object-cover group-hover:scale-105 transition-transform duration-500"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
               <span className="absolute bottom-3 left-3.5 right-3 text-white font-semibold text-xs sm:text-sm drop-shadow-sm line-clamp-1">

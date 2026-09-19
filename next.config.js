@@ -4,7 +4,15 @@ const nextConfig = {
   env: {
     NEXT_PUBLIC_APP_VERSION: require('./package.json').version,
   },
+  compress: true,
+  poweredByHeader: false,
+  swcMinify: true,
+  compiler: {
+    removeConsole:
+      process.env.NODE_ENV === 'production' ? { exclude: ['error', 'warn'] } : false,
+  },
   images: {
+    formats: ['image/avif', 'image/webp'],
     remotePatterns: [
       {
         protocol: 'http',

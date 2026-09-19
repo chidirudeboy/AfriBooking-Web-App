@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import AppShell from '@/components/AppShell';
 import { numberWithCommas } from '@/lib/utils';
 import {
@@ -392,11 +393,15 @@ export default function TripPlannerPage() {
                   <span className="text-[#ffbf00] font-bold">✓</span> Directions to each destination
                 </li>
               </ul>
-              <img
-                src="https://images.unsplash.com/photo-1582719508461-905c673771fd?w=600&auto=format&fit=crop&q=80"
-                alt="Palm resort pool"
-                className="w-full h-40 object-cover rounded-xl"
-              />
+              <div className="relative w-full h-40 rounded-xl overflow-hidden">
+                <Image
+                  src="https://images.unsplash.com/photo-1582719508461-905c673771fd?w=600&auto=format&fit=crop&q=80"
+                  alt="Palm resort pool"
+                  fill
+                  sizes="(max-width: 1024px) 100vw, 360px"
+                  className="object-cover"
+                />
+              </div>
             </aside>
           </div>
         </div>
