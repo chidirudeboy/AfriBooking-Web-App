@@ -469,40 +469,40 @@ export default function TripPlannerPage() {
           {/* Main Layout: Timeline & Spend Side */}
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_350px] gap-8 items-start">
             {/* Timeline */}
-            <div className="relative pl-6 border-l-2 border-[#e2b542] dark:border-[#866000] space-y-6">
+            <div className="relative pl-5 sm:pl-6 border-l-2 border-[#e2b542] dark:border-[#866000] space-y-6">
               {currentDayActivities.map((act, index) => (
                 <article
                   key={index}
-                  className="relative bg-white dark:bg-[#1c222c] border border-[#e7e8eb] dark:border-[#353c47] rounded-2xl p-5 sm:p-6 shadow-sm"
+                  className="relative bg-white dark:bg-[#1c222c] border border-[#e7e8eb] dark:border-[#353c47] rounded-2xl p-4 sm:p-6 shadow-sm"
                 >
                   {/* Circle dot on timeline */}
-                  <div className="absolute -left-[31px] top-6 w-3 h-3 rounded-full bg-[#ffbf00] border-4 border-[#fff9e9] dark:border-[#302916] box-content" />
+                  <div className="absolute -left-[27px] sm:-left-[31px] top-6 w-3 h-3 rounded-full bg-[#ffbf00] border-4 border-[#fff9e9] dark:border-[#302916] box-content" />
 
-                  <div className="flex items-start justify-between gap-4 mb-2">
+                  <div className="flex items-start justify-between gap-3 sm:gap-4 mb-2">
                     <div>
-                      <span className="text-[11px] font-bold text-[#997000] dark:text-[#ffbf00] tracking-wider uppercase">
+                      <span className="text-[10px] sm:text-[11px] font-bold text-[#997000] dark:text-[#ffbf00] tracking-wider uppercase">
                         {act.time}
                       </span>
-                      <h3 className="font-display text-lg font-bold text-[#17191b] dark:text-[#f0f2f6] mt-0.5">
+                      <h3 className="font-display text-base sm:text-lg font-bold text-[#17191b] dark:text-[#f0f2f6] mt-0.5">
                         {act.title}
                       </h3>
                     </div>
                     <div className="text-right shrink-0">
-                      <span className="font-bold text-sm text-[#17191b] dark:text-[#f0f2f6]">
+                      <span className="font-bold text-sm sm:text-base text-[#17191b] dark:text-[#f0f2f6]">
                         ₦{numberWithCommas(act.pricePerPerson)}
                       </span>
-                      <p className="text-[11px] text-[#6c7075] dark:text-[#acb4c0]">est. / person</p>
+                      <p className="text-[10px] sm:text-[11px] text-[#6c7075] dark:text-[#acb4c0]">est. / person</p>
                     </div>
                   </div>
 
                   <p className="text-xs text-[#6c7075] dark:text-[#acb4c0] mb-2">{act.category} · Suggested activity</p>
 
                   <p className="flex items-center text-xs text-[#6c7075] dark:text-[#acb4c0] mb-4">
-                    <MapPin size={14} className="mr-1.5 text-[#ffbf00]" />
-                    <span>{act.location}</span>
+                    <MapPin size={14} className="mr-1.5 text-[#ffbf00] shrink-0" />
+                    <span className="truncate">{act.location}</span>
                   </p>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <a
                       href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
                         act.title + ' ' + act.location

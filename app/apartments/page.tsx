@@ -378,17 +378,17 @@ export default function ApartmentsPage() {
         /* 3. Unified Search Bar */
         <form
           onSubmit={handleSearchSubmit}
-          className="bg-white dark:bg-[#1c222c] border border-[#dedfe2] dark:border-[#353c47] rounded-2xl p-2 sm:p-2.5 shadow-sm mb-7 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 sm:gap-0 divide-y sm:divide-y-0 sm:divide-x divide-[#e7e8eb] dark:divide-[#353c47]"
+          className="bg-white dark:bg-[#1c222c] border border-[#dedfe2] dark:border-[#353c47] rounded-2xl p-2.5 sm:p-3 shadow-sm mb-7 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 lg:gap-0 lg:divide-x divide-[#e7e8eb] dark:divide-[#353c47]"
         >
           {/* Destination */}
-          <div className="px-3 sm:px-4 py-2 flex flex-col justify-center">
+          <div className="px-3 sm:px-4 py-2 flex flex-col justify-center rounded-xl bg-gray-50/70 sm:bg-transparent dark:bg-transparent">
             <label className="block text-[11px] font-bold tracking-wider uppercase text-[#896300] dark:text-[#ffbf00] mb-1">
               Destination
             </label>
             <select
               value={destination}
               onChange={(e) => setDestination(e.target.value)}
-              className="bg-transparent text-sm font-medium text-[#17191b] dark:text-[#f0f2f6] focus:outline-none cursor-pointer"
+              className="bg-transparent text-sm font-medium text-[#17191b] dark:text-[#f0f2f6] focus:outline-none cursor-pointer w-full"
             >
               <option value="All destinations">All destinations</option>
               <option value="Lagos">Lagos</option>
@@ -399,7 +399,7 @@ export default function ApartmentsPage() {
           </div>
 
           {/* Check-in Date */}
-          <div className="px-3 sm:px-4 py-2 flex flex-col justify-center">
+          <div className="px-3 sm:px-4 py-2 flex flex-col justify-center rounded-xl bg-gray-50/70 sm:bg-transparent dark:bg-transparent">
             <label className="block text-[11px] font-bold tracking-wider uppercase text-[#6c7075] dark:text-[#acb4c0] mb-1">
               Check-in
             </label>
@@ -407,12 +407,12 @@ export default function ApartmentsPage() {
               type="date"
               value={checkInDate}
               onChange={(e) => setCheckInDate(e.target.value)}
-              className="bg-transparent text-sm text-[#17191b] dark:text-[#f0f2f6] focus:outline-none"
+              className="bg-transparent text-sm text-[#17191b] dark:text-[#f0f2f6] focus:outline-none w-full"
             />
           </div>
 
           {/* Check-out Date */}
-          <div className="px-3 sm:px-4 py-2 flex flex-col justify-center">
+          <div className="px-3 sm:px-4 py-2 flex flex-col justify-center rounded-xl bg-gray-50/70 sm:bg-transparent dark:bg-transparent">
             <label className="block text-[11px] font-bold tracking-wider uppercase text-[#6c7075] dark:text-[#acb4c0] mb-1">
               Check-out
             </label>
@@ -420,19 +420,19 @@ export default function ApartmentsPage() {
               type="date"
               value={checkOutDate}
               onChange={(e) => setCheckOutDate(e.target.value)}
-              className="bg-transparent text-sm text-[#17191b] dark:text-[#f0f2f6] focus:outline-none"
+              className="bg-transparent text-sm text-[#17191b] dark:text-[#f0f2f6] focus:outline-none w-full"
             />
           </div>
 
           {/* Guests */}
-          <div className="px-3 sm:px-4 py-2 flex flex-col justify-center">
+          <div className="px-3 sm:px-4 py-2 flex flex-col justify-center rounded-xl bg-gray-50/70 sm:bg-transparent dark:bg-transparent">
             <label className="block text-[11px] font-bold tracking-wider uppercase text-[#6c7075] dark:text-[#acb4c0] mb-1">
               Guests
             </label>
             <select
               value={guestsCount}
               onChange={(e) => setGuestsCount(e.target.value)}
-              className="bg-transparent text-sm font-medium text-[#17191b] dark:text-[#f0f2f6] focus:outline-none cursor-pointer"
+              className="bg-transparent text-sm font-medium text-[#17191b] dark:text-[#f0f2f6] focus:outline-none cursor-pointer w-full"
             >
               <option value="1 guest">1 guest</option>
               <option value="2 guests">2 guests</option>
@@ -443,10 +443,10 @@ export default function ApartmentsPage() {
           </div>
 
           {/* Search Button */}
-          <div className="p-1.5 flex items-center justify-center">
+          <div className="p-1 sm:col-span-2 lg:col-span-1 flex items-center justify-center">
             <button
               type="submit"
-              className="w-full h-full min-h-[44px] bg-[#ffbf00] hover:bg-[#eeb200] text-[#17191b] font-bold text-sm rounded-xl px-5 py-3 flex items-center justify-center gap-2 transition-colors shadow-sm"
+              className="w-full h-full min-h-[46px] bg-[#ffbf00] hover:bg-[#eeb200] text-[#17191b] font-bold text-sm rounded-xl px-5 py-3 flex items-center justify-center gap-2 transition-colors shadow-sm"
             >
               <Search size={18} className="stroke-[2.5]" />
               <span>Search</span>
@@ -456,16 +456,16 @@ export default function ApartmentsPage() {
       )}
 
       {/* 4. AI Banner */}
-      <section className="banner-gradient rounded-2xl p-6 sm:p-8 mb-8 relative overflow-hidden flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
-        <div className="flex items-start gap-4">
-          <div className="text-4xl sm:text-5xl text-[#dc9d00] dark:text-[#ffbf00] leading-none select-none">
+      <section className="banner-gradient rounded-2xl p-5 sm:p-7 md:p-8 mb-8 relative overflow-hidden flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
+        <div className="flex items-start gap-3.5 sm:gap-4">
+          <div className="text-3xl sm:text-4xl md:text-5xl text-[#dc9d00] dark:text-[#ffbf00] leading-none select-none">
             ✦
           </div>
           <div>
-            <span className="block text-[11px] font-bold tracking-[1.5px] text-[#896300] dark:text-[#ffbf00] uppercase mb-1">
+            <span className="block text-[10px] sm:text-[11px] font-bold tracking-[1.5px] text-[#896300] dark:text-[#ffbf00] uppercase mb-1">
               AFRIBOOKING AI
             </span>
-            <h2 className="font-display text-xl sm:text-2xl font-bold text-[#17191b] dark:text-white">
+            <h2 className="font-display text-lg sm:text-xl md:text-2xl font-bold text-[#17191b] dark:text-white leading-tight">
               Your trip, all in one plan.
             </h2>
             <p className="text-xs sm:text-sm text-[#62605a] dark:text-[#acb4c0] mt-1 max-w-xl">
@@ -475,7 +475,7 @@ export default function ApartmentsPage() {
         </div>
         <Link
           href="/planner"
-          className="shrink-0 bg-[#17191b] hover:bg-black dark:bg-white dark:hover:bg-gray-100 text-white dark:text-[#17191b] font-bold text-sm px-5 py-3 rounded-xl inline-flex items-center gap-2 transition-colors shadow-md"
+          className="shrink-0 w-full sm:w-auto text-center justify-center bg-[#17191b] hover:bg-black dark:bg-white dark:hover:bg-gray-100 text-white dark:text-[#17191b] font-bold text-sm px-5 py-3 rounded-xl inline-flex items-center gap-2 transition-colors shadow-md"
         >
           <span>Plan my trip</span>
           <span>↗</span>
@@ -489,7 +489,7 @@ export default function ApartmentsPage() {
             Find your kind of stay
           </h2>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 sm:gap-4">
+        <div className="flex sm:grid sm:grid-cols-3 md:grid-cols-5 gap-3 sm:gap-4 overflow-x-auto no-scrollbar -mx-4 px-4 sm:mx-0 sm:px-0 pb-1">
           {browseCategories.map((cat) => (
             <button
               key={cat.name}
@@ -498,7 +498,7 @@ export default function ApartmentsPage() {
                 const res = document.getElementById('results-section');
                 if (res) res.scrollIntoView({ behavior: 'smooth', block: 'start' });
               }}
-              className="group relative h-28 sm:h-32 rounded-xl overflow-hidden text-left focus:outline-none focus:ring-2 focus:ring-[#ffbf00]"
+              className="group relative flex-shrink-0 w-[140px] sm:w-auto h-28 sm:h-32 rounded-xl overflow-hidden text-left focus:outline-none focus:ring-2 focus:ring-[#ffbf00]"
             >
               <img
                 src={cat.image}
@@ -506,7 +506,7 @@ export default function ApartmentsPage() {
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
-              <span className="absolute bottom-3 left-3.5 right-3 text-white font-semibold text-sm drop-shadow-sm">
+              <span className="absolute bottom-3 left-3.5 right-3 text-white font-semibold text-xs sm:text-sm drop-shadow-sm line-clamp-1">
                 {cat.name}
               </span>
             </button>

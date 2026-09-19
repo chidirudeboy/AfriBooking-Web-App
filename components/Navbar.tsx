@@ -32,23 +32,23 @@ export default function Navbar() {
 
   return (
     <>
-      <header className="sticky top-0 z-40 h-[76px] md:h-[94px] bg-white dark:bg-[#141922] border-b border-[#e7e8eb] dark:border-[#353c47] transition-colors">
-        <div className="max-w-[1320px] h-full mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-3 md:gap-6">
+      <header className="sticky top-0 z-40 h-[68px] sm:h-[76px] md:h-[94px] bg-white dark:bg-[#141922] border-b border-[#e7e8eb] dark:border-[#353c47] transition-colors">
+        <div className="max-w-[1320px] h-full mx-auto px-3 sm:px-6 lg:px-8 flex items-center justify-between gap-2 sm:gap-4 md:gap-6">
           {/* Left: Menu button & Brand Logo */}
-          <div className="flex items-center gap-3 md:gap-4">
+          <div className="flex items-center gap-2 sm:gap-3 md:gap-4">
             <button
               onClick={() => setDrawerOpen(true)}
-              className="p-2 md:px-3 md:py-2 rounded-xl border border-[#e7e8eb] dark:border-[#353c47] hover:border-[#ffbf00] dark:hover:border-[#ffbf00] bg-white dark:bg-[#1c222c] text-[#17191b] dark:text-[#f0f2f6] transition-colors focus:outline-none focus:ring-2 focus:ring-[#ffbf00]"
+              className="p-2 sm:px-3 sm:py-2 rounded-xl border border-[#e7e8eb] dark:border-[#353c47] hover:border-[#ffbf00] dark:hover:border-[#ffbf00] bg-white dark:bg-[#1c222c] text-[#17191b] dark:text-[#f0f2f6] transition-colors focus:outline-none focus:ring-2 focus:ring-[#ffbf00]"
               aria-label="Open menu"
             >
-              <Menu size={20} className="md:w-5 md:h-5" />
+              <Menu size={19} className="sm:w-5 sm:h-5" />
             </button>
 
             <Link href="/apartments" className="flex flex-col select-none group">
-              <span className="font-display font-extrabold text-2xl md:text-[28px] tracking-tight leading-none text-[#17191b] dark:text-[#f0f2f6]">
+              <span className="font-display font-extrabold text-xl sm:text-2xl md:text-[28px] tracking-tight leading-none text-[#17191b] dark:text-[#f0f2f6]">
                 Afri<span className="text-[#ffbf00] group-hover:text-[#eeb200] transition-colors">Booking</span>
               </span>
-              <span className="text-[9px] font-semibold tracking-[2px] text-[#6c7075] dark:text-[#acb4c0] uppercase mt-1">
+              <span className="text-[8px] sm:text-[9px] font-semibold tracking-[1.8px] sm:tracking-[2px] text-[#6c7075] dark:text-[#acb4c0] uppercase mt-0.5 sm:mt-1">
                 FIND & BOOK
               </span>
             </Link>
