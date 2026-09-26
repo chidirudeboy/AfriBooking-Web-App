@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
@@ -14,15 +14,18 @@ import { getPrice } from '@/lib/utils/price';
 import axios from 'axios';
 import { 
   MapPin, Bed, Bath, Users, ChevronLeft, ChevronRight, 
-  CheckCircle, Copy, ArrowLeft, Calendar, Shield, Building2, Play
+  CheckCircle, Copy, ArrowLeft, Calendar, Shield, Building2, Play, Download
 } from 'lucide-react';
 import MediaModal from '@/components/MediaModal';
+import MediaDownloadModal from '@/components/MediaDownloadModal';
+import DownloadLoginPrompt from '@/components/DownloadLoginPrompt';
 import toast from 'react-hot-toast';
 import ApartmentEnhancements from '@/components/ApartmentEnhancements';
 
 export default function ApartmentDetailsPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user } = useAuth();
   const apartmentId = params?.id as string;
 
@@ -33,6 +36,8 @@ export default function ApartmentDetailsPage() {
   const [selectedBedrooms, setSelectedBedrooms] = useState<number | null>(null);
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
   const [isMediaModalOpen, setIsMediaModalOpen] = useState(false);
+  const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
+  const [isDownloadLoginOpen, setIsDownloadLoginOpen] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [showBedroomDropdown, setShowBedroomDropdown] = useState(false);
   const [reservationStatus, setReservationStatus] = useState<string | null>(null);
@@ -728,6 +733,32 @@ export default function ApartmentDetailsPage() {
     return items;
   }, [apartment?.media?.images, apartment?.media?.videos, apartment?.videos]);
 
+  useEffect(() => {
+    if (user && searchParams.get('downloadMedia') === '1' && mediaItems.length > 0) {
+      setIsDownloadModalOpen(true);
+      router.replace(`/apartments/${apartmentId}`, { scroll: false });
+    }
+  }, [user, searchParams, mediaItems.length, router, apartmentId]);
+
+  const handleOpenDownload = () => {
+    if (!mediaItems.length) {
+      toast.error('This apartment does not have any downloadable media.');
+      return;
+    }
+
+    if (!user) {
+      setIsDownloadLoginOpen(true);
+      return;
+    }
+
+    setIsDownloadModalOpen(true);
+  };
+
+  const handleContinueToLogin = () => {
+    const returnTo = `/apartments/${apartmentId}?downloadMedia=1`;
+    router.push(`/login?returnTo=${encodeURIComponent(returnTo)}`);
+  };
+
   const handlePreviousImage = () => {
     setIsVideoPlaying(false);
     setCurrentImageIndex((prev) => 
@@ -815,6 +846,19 @@ export default function ApartmentDetailsPage() {
           <div className="relative w-full h-64 sm:h-80 md:h-96 lg:h-[500px] rounded-lg overflow-hidden mb-4 sm:mb-6 bg-gray-200 dark:bg-gray-700">
             {mediaItems.length > 0 ? (
               <>
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    handleOpenDownload();
+                  }}
+                  className="absolute right-3 top-3 z-30 inline-flex min-h-[44px] items-center gap-2 rounded-full border border-white/70 bg-white/90 px-4 py-2.5 text-sm font-bold text-gray-900 shadow-lg backdrop-blur-md transition hover:bg-white hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-[#ffbf00] focus:ring-offset-2 sm:right-4 sm:top-4"
+                  aria-label="Choose apartment media to download"
+                >
+                  <Download size={17} />
+                  <span className="hidden sm:inline">Download media</span>
+                  <span className="sm:hidden">Download</span>
+                </button>
                 <button
                   onClick={() => setIsMediaModalOpen(true)}
                   className="absolute inset-0 w-full h-full z-0 focus:outline-none"
@@ -1292,6 +1336,18 @@ export default function ApartmentDetailsPage() {
         onClose={() => setIsMediaModalOpen(false)}
         mediaItems={mediaItems}
         initialIndex={currentImageIndex}
+      />
+      <MediaDownloadModal
+        isOpen={isDownloadModalOpen}
+        onClose={() => setIsDownloadModalOpen(false)}
+        mediaItems={mediaItems}
+        apartmentName={apartment.apartmentName || 'Apartment'}
+        authToken={user?.accessToken || user?.token || ''}
+      />
+      <DownloadLoginPrompt
+        isOpen={isDownloadLoginOpen}
+        onClose={() => setIsDownloadLoginOpen(false)}
+        onLogin={handleContinueToLogin}
       />
     </>
   );

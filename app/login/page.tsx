@@ -16,7 +16,11 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (user) {
-      router.push('/apartments');
+      const returnTo = new URLSearchParams(window.location.search).get('returnTo');
+      const safeReturnTo = returnTo?.startsWith('/') && !returnTo.startsWith('//')
+        ? returnTo
+        : '/apartments';
+      router.push(safeReturnTo);
     }
   }, [user, router]);
 
