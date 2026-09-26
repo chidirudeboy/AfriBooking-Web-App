@@ -49,14 +49,12 @@ export default function MediaDownloadModal({
   const [selectedIndexes, setSelectedIndexes] = useState<Set<number>>(new Set());
   const [isDownloading, setIsDownloading] = useState(false);
   const [processedFiles, setProcessedFiles] = useState(0);
-  const [archiveProgress, setArchiveProgress] = useState(0);
 
   useEffect(() => {
     if (!isOpen) return;
 
     setSelectedIndexes(new Set(mediaItems.map((_, index) => index)));
     setProcessedFiles(0);
-    setArchiveProgress(0);
   }, [isOpen, mediaItems]);
 
   useEffect(() => {
@@ -106,15 +104,8 @@ export default function MediaDownloadModal({
 
     setIsDownloading(true);
     setProcessedFiles(0);
-    setArchiveProgress(0);
 
     try {
-      const JSZip = (await import('jszip')).default;
-      const archive = new JSZip();
-      const folder = archive.folder('media');
-
-      if (!folder) throw new Error('Could not create the media archive.');
-
       for (let index = 0; index < selectedItems.length; index += 1) {
         const item = selectedItems[index];
         const response = await fetch(`/api/media-download?url=${encodeURIComponent(item.uri)}`, {
@@ -129,24 +120,18 @@ export default function MediaDownloadModal({
         const blob = await response.blob();
         const extension = fileExtension(item.uri, blob.type, item.type);
         const label = item.type === 'video' ? 'video' : 'photo';
-        folder.file(`${label}-${String(index + 1).padStart(2, '0')}.${extension}`, blob);
+        const objectUrl = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = objectUrl;
+        anchor.download = `${safeFileName(apartmentName)}-${label}-${String(index + 1).padStart(2, '0')}.${extension}`;
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
         setProcessedFiles(index + 1);
       }
 
-      const zipBlob = await archive.generateAsync(
-        { type: 'blob', compression: 'STORE' },
-        ({ percent }) => setArchiveProgress(Math.round(percent))
-      );
-      const objectUrl = URL.createObjectURL(zipBlob);
-      const anchor = document.createElement('a');
-      anchor.href = objectUrl;
-      anchor.download = `${safeFileName(apartmentName)}-media.zip`;
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      URL.revokeObjectURL(objectUrl);
-
-      toast.success(`${selectedItems.length} media file${selectedItems.length === 1 ? '' : 's'} ready to download`);
+      toast.success(`${selectedItems.length} media download${selectedItems.length === 1 ? '' : 's'} started`);
       onClose();
     } catch (error) {
       console.error('Media download failed:', error);
@@ -154,15 +139,12 @@ export default function MediaDownloadModal({
     } finally {
       setIsDownloading(false);
       setProcessedFiles(0);
-      setArchiveProgress(0);
     }
   };
 
   if (!isOpen) return null;
 
-  const progressLabel = processedFiles < selectedItems.length
-    ? `Preparing ${processedFiles + 1} of ${selectedItems.length}`
-    : `Creating ZIP ${archiveProgress}%`;
+  const progressLabel = `Downloading ${Math.min(processedFiles + 1, selectedItems.length)} of ${selectedItems.length}`;
 
   return (
     <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/55 p-0 backdrop-blur-sm sm:items-center sm:p-6" onMouseDown={() => !isDownloading && onClose()}>
@@ -247,7 +229,7 @@ export default function MediaDownloadModal({
                 <span>{processedFiles}/{selectedItems.length} files</span>
               </div>
               <div className="h-1.5 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
-                <div className="h-full rounded-full bg-[#ffbf00] transition-all duration-300" style={{ width: `${selectedItems.length ? Math.min(100, (processedFiles / selectedItems.length) * 90 + archiveProgress * 0.1) : 0}%` }} />
+                <div className="h-full rounded-full bg-[#ffbf00] transition-all duration-300" style={{ width: `${selectedItems.length ? (processedFiles / selectedItems.length) * 100 : 0}%` }} />
               </div>
             </div>
           )}
