@@ -1,589 +1,495 @@
 'use client';
 
-import { useState } from 'react';
-import Link from 'next/link';
+import { FormEvent, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
-import AppShell from '@/components/AppShell';
-import { numberWithCommas } from '@/lib/utils';
+import Link from 'next/link';
 import {
-  Sparkles,
-  MapPin,
-  Calendar,
-  Users,
-  Car,
+  ArrowRight,
+  BedDouble,
+  Bot,
+  CalendarDays,
+  Check,
   Compass,
-  ArrowLeft,
-  Share2,
-  Bookmark,
-  ExternalLink,
+  Loader2,
+  MapPin,
+  RotateCcw,
+  Send,
+  Sparkles,
+  Users,
+  Wallet,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import AppShell from '@/components/AppShell';
+import { tripPlannerMessage } from '@/lib/endpoints';
 
-interface ActivityItem {
-  time: string;
-  category: string;
-  title: string;
-  location: string;
-  pricePerPerson: number;
-}
-
-const sampleActivities: Record<string, ActivityItem[]> = {
-  Abuja: [
-    {
-      time: '10:00 AM · MORNING',
-      category: 'Culture',
-      title: 'Thought Pyramid Art Centre',
-      location: 'Wuse 2, Abuja',
-      pricePerPerson: 6000,
-    },
-    {
-      time: '1:30 PM · AFTERNOON',
-      category: 'Relaxation',
-      title: 'Jabi Lake Park & Waterfront Stroll',
-      location: 'Jabi, Abuja',
-      pricePerPerson: 2500,
-    },
-    {
-      time: '6:00 PM · EVENING',
-      category: 'Food',
-      title: 'Nkoyo Traditional Dining',
-      location: 'Wuse 2, Abuja',
-      pricePerPerson: 12000,
-    },
-    {
-      time: '9:30 PM · NIGHT',
-      category: 'Nightlife',
-      title: 'Moscow Underground Lounge',
-      location: 'Wuse 2, Abuja',
-      pricePerPerson: 15000,
-    },
-  ],
-  Lagos: [
-    {
-      time: '10:00 AM · MORNING',
-      category: 'Beaches',
-      title: 'Moist Beach Club & Oceanfront Breakfast',
-      location: 'Oniru, Victoria Island, Lagos',
-      pricePerPerson: 10000,
-    },
-    {
-      time: '1:30 PM · AFTERNOON',
-      category: 'Culture',
-      title: 'Nike Art Gallery & African Crafts',
-      location: 'Lekki Phase 1, Lagos',
-      pricePerPerson: 5000,
-    },
-    {
-      time: '6:30 PM · EVENING',
-      category: 'Food',
-      title: 'Terra Kulture Restaurant & Arts',
-      location: 'Victoria Island, Lagos',
-      pricePerPerson: 16000,
-    },
-    {
-      time: '10:00 PM · NIGHT',
-      category: 'Nightlife',
-      title: 'Zaza Lounge & Club',
-      location: 'Victoria Island, Lagos',
-      pricePerPerson: 25000,
-    },
-  ],
+type ConversationMessage = {
+  role: 'user' | 'assistant';
+  content: string;
 };
 
-const interestOptions = [
-  'Food',
-  'Culture',
-  'Beaches',
-  'Nightlife',
-  'Shopping',
-  'Adventure',
-  'Relaxation',
-  'Family',
-  'Events',
+type TripIntent = {
+  destination?: string;
+  startDate?: string;
+  endDate?: string;
+  durationDays?: number;
+  guests?: number;
+  budget?: number;
+  interests: string[];
+  pace?: 'relaxed' | 'balanced' | 'packed';
+  transport?: string;
+  notes?: string;
+  missingFields: string[];
+};
+
+type ApartmentCandidate = {
+  id: string;
+  name: string;
+  city: string;
+  state: string;
+  neighborhood?: string;
+  address: string;
+  pricePerNight: number;
+  bedrooms: number;
+  guests: number;
+  amenities: string[];
+  image?: string;
+};
+
+type ItineraryActivity = {
+  time: string;
+  title: string;
+  category: string;
+  location: string;
+  description: string;
+  estimatedCostPerPerson?: number;
+};
+
+type ItineraryDay = {
+  day: number;
+  title: string;
+  activities: ItineraryActivity[];
+};
+
+type PlannerResult = {
+  provider: string;
+  reply: string;
+  status: 'gathering' | 'ready' | 'no_inventory';
+  intent: TripIntent;
+  apartments: ApartmentCandidate[];
+  activities: Array<{ id: string; name: string }>;
+  itinerary?: {
+    title: string;
+    summary: string;
+    selectedApartmentId?: string;
+    estimatedActivityCost?: number;
+    days: ItineraryDay[];
+  };
+};
+
+const starterPrompts = [
+  'Plan a relaxing weekend in Ikeja for two',
+  'I want a family trip to Jos on a budget',
+  'Give me a lively three-day Lagos experience',
 ];
 
+const answerSuggestions: Record<string, string[]> = {
+  destination: ['Ikeja, Lagos', 'Jos, Plateau', 'Abuja'],
+  datesOrDuration: ['This weekend', '3 days', '5 days'],
+  guests: ['Just me', '2 guests', 'A family of 4'],
+  budget: ['Under ₦250,000', '₦500,000 total', 'Luxury — flexible budget'],
+  interests: ['Food and culture', 'Nature and relaxation', 'Nightlife and shopping', 'Family activities'],
+  pace: ['Relaxed pace', 'Balanced pace', 'Pack in as much as possible'],
+  transport: ['I have a car', 'Ride-hailing', 'Keep everything nearby'],
+};
+
+const initialMessage: ConversationMessage = {
+  role: 'assistant',
+  content:
+    'Tell me where you are going or the kind of trip you want. I’ll begin with available AfriBooking stays, then build the experience around you.',
+};
+
+const formatNaira = (value: number) =>
+  new Intl.NumberFormat('en-NG', {
+    style: 'currency',
+    currency: 'NGN',
+    maximumFractionDigits: 0,
+  }).format(value);
+
 export default function TripPlannerPage() {
-  const [step, setStep] = useState<'form' | 'itinerary'>('form');
-  const [city, setCity] = useState('Abuja');
-  const [travellers, setTravellers] = useState(2);
-  const [startDate, setStartDate] = useState('2026-10-21');
-  const [endDate, setEndDate] = useState('2026-10-24');
-  const [selectedInterests, setSelectedInterests] = useState<string[]>([
-    'Food',
-    'Culture',
-    'Nightlife',
-  ]);
-  const [pace, setPace] = useState('Balanced');
-  const [transport, setTransport] = useState('Rent a car');
-  const [budget, setBudget] = useState(250000);
-  const [notes, setNotes] = useState('');
+  const [messages, setMessages] = useState<ConversationMessage[]>([initialMessage]);
+  const [input, setInput] = useState('');
+  const [result, setResult] = useState<PlannerResult | null>(null);
+  const [loading, setLoading] = useState(false);
   const [selectedDay, setSelectedDay] = useState(1);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  const toggleInterest = (interest: string) => {
-    setSelectedInterests((prev) =>
-      prev.includes(interest) ? prev.filter((i) => i !== interest) : [...prev, interest]
+  const suggestions = useMemo(() => {
+    if (!result) return starterPrompts;
+    const firstMissing = result.intent.missingFields?.[0];
+    return (firstMissing && answerSuggestions[firstMissing]) || [
+      'Make it more affordable',
+      'Show me a different stay',
+      'Keep activities closer together',
+    ];
+  }, [result]);
+
+  const selectedApartment = useMemo(() => {
+    if (!result?.apartments.length) return undefined;
+    return (
+      result.apartments.find(
+        (apartment) => apartment.id === result.itinerary?.selectedApartmentId
+      ) || result.apartments[0]
     );
+  }, [result]);
+
+  const selectedItineraryDay =
+    result?.itinerary?.days.find((day) => day.day === selectedDay) || result?.itinerary?.days[0];
+
+  const sendMessage = async (message: string) => {
+    const trimmed = message.trim();
+    if (!trimmed || loading) return;
+
+    const nextMessages: ConversationMessage[] = [
+      ...messages,
+      { role: 'user', content: trimmed },
+    ];
+    setMessages(nextMessages);
+    setInput('');
+    setLoading(true);
+
+    try {
+      const response = await fetch(tripPlannerMessage, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: trimmed,
+          conversation: nextMessages.slice(-10),
+          intent: result?.intent,
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok || !payload.success) {
+        throw new Error(payload.message || 'Unable to plan this trip right now');
+      }
+
+      const plannerResult = payload.data as PlannerResult;
+      setResult(plannerResult);
+      setSelectedDay(plannerResult.itinerary?.days[0]?.day || 1);
+      setMessages((current) => [
+        ...current,
+        { role: 'assistant', content: plannerResult.reply },
+      ]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to plan this trip right now';
+      toast.error(message);
+      setMessages((current) => [
+        ...current,
+        {
+          role: 'assistant',
+          content: 'I couldn’t complete that step just now. Please try again in a moment.',
+        },
+      ]);
+    } finally {
+      setLoading(false);
+      window.setTimeout(() => inputRef.current?.focus(), 100);
+    }
   };
 
-  const handleBuildItinerary = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!startDate || !endDate) {
-      toast.error('Please select both arrival and departure dates.');
-      return;
-    }
-    const days = Math.round(
-      (new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)
-    );
-    if (days <= 0 || days > 14) {
-      toast.error('Please choose a trip duration between 1 and 14 days.');
-      return;
-    }
-    if (selectedInterests.length === 0) {
-      toast.error('Please select at least one interest.');
-      return;
-    }
+  const handleSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    void sendMessage(input);
+  };
+
+  const resetPlanner = () => {
+    setMessages([initialMessage]);
+    setInput('');
+    setResult(null);
     setSelectedDay(1);
-    setStep('itinerary');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    inputRef.current?.focus();
   };
-
-  const tripDays = Math.max(
-    1,
-    Math.round(
-      (new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)
-    )
-  );
-
-  const cityActivities = sampleActivities[city] || sampleActivities.Abuja;
-  const filteredActivities = cityActivities.filter((a) =>
-    selectedInterests.includes(a.category)
-  );
-  const activitiesToDisplay =
-    filteredActivities.length > 0 ? filteredActivities : cityActivities.slice(0, 3);
-  const count = pace === 'Relaxed' ? 2 : pace === 'Packed' ? 4 : 3;
-  const currentDayActivities = activitiesToDisplay.slice(0, count);
-
-  const activityTotal = currentDayActivities.reduce(
-    (acc, item) => acc + item.pricePerPerson * travellers,
-    0
-  );
-  const transportCost = transport === 'Use my car' ? 0 : 45000;
-  const dayTotal = activityTotal + transportCost;
 
   return (
     <AppShell>
-      {step === 'form' ? (
-        <div>
-          {/* Back link */}
-          <Link
-            href="/apartments"
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#6c7075] dark:text-[#acb4c0] hover:text-[#17191b] dark:hover:text-white mb-6"
-          >
-            <ArrowLeft size={14} />
-            <span>Back to discover</span>
-          </Link>
-
-          {/* Heading */}
-          <div className="mb-8">
-            <span className="block text-xs font-bold tracking-[1.7px] text-[#896300] dark:text-[#ffbf00] uppercase mb-2">
-              AFRIBOOKING AI · TRIP DETAILS
-            </span>
-            <h1 className="font-display text-3xl sm:text-4xl font-extrabold text-[#17191b] dark:text-[#f0f2f6] tracking-tight">
-              Make every day your kind of day.
+      <main className="mx-auto max-w-[1320px] pb-16">
+        <header className="relative overflow-hidden rounded-[28px] border border-[#f1dfac] bg-[radial-gradient(circle_at_top_right,_#fff2b7,_#fffaf0_45%,_#ffffff_78%)] px-5 py-8 sm:px-9 sm:py-10 dark:border-[#403821] dark:bg-[radial-gradient(circle_at_top_right,_#3d3215,_#1c222c_50%,_#141922_80%)]">
+          <div className="absolute -right-12 -top-16 h-52 w-52 rounded-full bg-[#ffbf00]/20 blur-3xl" />
+          <div className="relative max-w-3xl">
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-[#e9c75f] bg-white/80 px-3 py-1.5 text-[11px] font-extrabold uppercase tracking-[0.16em] text-[#7c5a00] dark:bg-[#181d25]/80 dark:text-[#ffcb32]">
+              <Sparkles size={13} /> AfriBooking AI
+            </div>
+            <h1 className="font-display text-3xl font-black tracking-tight text-[#17191b] sm:text-5xl dark:text-white">
+              Start with a thought. Leave with a trip.
             </h1>
-            <p className="text-sm sm:text-base text-[#6c7075] dark:text-[#acb4c0] mt-2">
-              Tell us where you’ll be and what you enjoy. We’ll organize stays, spaces, and plans.
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-[#636970] sm:text-base dark:text-[#bbc2cc]">
+              Speak naturally. We search AfriBooking stays first and shape a practical itinerary around what matters to you.
             </p>
           </div>
+        </header>
 
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-8 items-start">
-            {/* Form */}
-            <form onSubmit={handleBuildItinerary} className="space-y-6">
-              {/* Panel 1: Essentials */}
-              <section className="bg-white dark:bg-[#1c222c] border border-[#e7e8eb] dark:border-[#353c47] rounded-2xl p-6 shadow-sm">
-                <h3 className="font-display text-lg font-bold mb-4 text-[#17191b] dark:text-[#f0f2f6]">
-                  Your trip essentials
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-[#6c7075] dark:text-[#acb4c0] mb-1.5">
-                      Where will you stay?
-                    </label>
-                    <select
-                      value={city}
-                      onChange={(e) => setCity(e.target.value)}
-                      className="w-full bg-white dark:bg-[#141922] border border-[#dedfe2] dark:border-[#353c47] rounded-xl px-3.5 py-2.5 text-sm text-[#17191b] dark:text-[#f0f2f6] focus:outline-none focus:ring-2 focus:ring-[#ffbf00]"
-                    >
-                      <option value="Abuja">Abuja</option>
-                      <option value="Lagos">Lagos</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-[#6c7075] dark:text-[#acb4c0] mb-1.5">
-                      Travellers
-                    </label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={20}
-                      value={travellers}
-                      onChange={(e) => setTravellers(Number(e.target.value))}
-                      className="w-full bg-white dark:bg-[#141922] border border-[#dedfe2] dark:border-[#353c47] rounded-xl px-3.5 py-2.5 text-sm text-[#17191b] dark:text-[#f0f2f6] focus:outline-none focus:ring-2 focus:ring-[#ffbf00]"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-[#6c7075] dark:text-[#acb4c0] mb-1.5">
-                      Arrival
-                    </label>
-                    <input
-                      type="date"
-                      value={startDate}
-                      onChange={(e) => setStartDate(e.target.value)}
-                      className="w-full bg-white dark:bg-[#141922] border border-[#dedfe2] dark:border-[#353c47] rounded-xl px-3.5 py-2.5 text-sm text-[#17191b] dark:text-[#f0f2f6] focus:outline-none focus:ring-2 focus:ring-[#ffbf00]"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-[#6c7075] dark:text-[#acb4c0] mb-1.5">
-                      Departure
-                    </label>
-                    <input
-                      type="date"
-                      value={endDate}
-                      onChange={(e) => setEndDate(e.target.value)}
-                      className="w-full bg-white dark:bg-[#141922] border border-[#dedfe2] dark:border-[#353c47] rounded-xl px-3.5 py-2.5 text-sm text-[#17191b] dark:text-[#f0f2f6] focus:outline-none focus:ring-2 focus:ring-[#ffbf00]"
-                      required
-                    />
-                  </div>
+        <div className="mt-6 grid items-start gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)]">
+          <section className="overflow-hidden rounded-3xl border border-[#e8e9ec] bg-white shadow-[0_14px_45px_rgba(20,24,30,0.06)] dark:border-[#353c47] dark:bg-[#1c222c]">
+            <div className="flex items-center justify-between border-b border-[#eceef1] px-5 py-4 dark:border-[#353c47]">
+              <div className="flex items-center gap-3">
+                <div className="grid h-10 w-10 place-items-center rounded-2xl bg-[#ffbf00] text-[#17191b]">
+                  <Bot size={20} />
                 </div>
-              </section>
-
-              {/* Panel 2: Interests */}
-              <section className="bg-white dark:bg-[#1c222c] border border-[#e7e8eb] dark:border-[#353c47] rounded-2xl p-6 shadow-sm">
-                <h3 className="font-display text-lg font-bold mb-2 text-[#17191b] dark:text-[#f0f2f6]">
-                  What do you want to enjoy?
-                </h3>
-                <p className="text-xs text-[#6c7075] dark:text-[#acb4c0] mb-4">
-                  Select experiences you’d like woven into your itinerary.
-                </p>
-                <div className="flex flex-wrap gap-2.5">
-                  {interestOptions.map((interest) => {
-                    const isSelected = selectedInterests.includes(interest);
-                    return (
-                      <button
-                        type="button"
-                        key={interest}
-                        onClick={() => toggleInterest(interest)}
-                        className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold border transition-all ${
-                          isSelected
-                            ? 'bg-[#fff9e9] dark:bg-[#302916] border-[#e1ad24] text-[#866000] dark:text-[#ffbf00]'
-                            : 'border-[#dedfe2] dark:border-[#353c47] text-[#17191b] dark:text-[#f0f2f6] hover:border-[#ffbf00]'
-                        }`}
-                      >
-                        {interest} {isSelected ? '✓' : '+'}
-                      </button>
-                    );
-                  })}
-                </div>
-              </section>
-
-              {/* Panel 3: Pace & Budget */}
-              <section className="bg-white dark:bg-[#1c222c] border border-[#e7e8eb] dark:border-[#353c47] rounded-2xl p-6 shadow-sm">
-                <h3 className="font-display text-lg font-bold mb-4 text-[#17191b] dark:text-[#f0f2f6]">
-                  Set the pace and budget
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-[#6c7075] dark:text-[#acb4c0] mb-1.5">
-                      Pace of the trip
-                    </label>
-                    <select
-                      value={pace}
-                      onChange={(e) => setPace(e.target.value)}
-                      className="w-full bg-white dark:bg-[#141922] border border-[#dedfe2] dark:border-[#353c47] rounded-xl px-3.5 py-2.5 text-sm text-[#17191b] dark:text-[#f0f2f6] focus:outline-none focus:ring-2 focus:ring-[#ffbf00]"
-                    >
-                      <option value="Relaxed">Relaxed</option>
-                      <option value="Balanced">Balanced</option>
-                      <option value="Packed">Packed</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-[#6c7075] dark:text-[#acb4c0] mb-1.5">
-                      Getting around
-                    </label>
-                    <select
-                      value={transport}
-                      onChange={(e) => setTransport(e.target.value)}
-                      className="w-full bg-white dark:bg-[#141922] border border-[#dedfe2] dark:border-[#353c47] rounded-xl px-3.5 py-2.5 text-sm text-[#17191b] dark:text-[#f0f2f6] focus:outline-none focus:ring-2 focus:ring-[#ffbf00]"
-                    >
-                      <option value="Use my car">Use my car</option>
-                      <option value="Rent a car">Rent a car</option>
-                      <option value="Chauffeur">Chauffeur</option>
-                      <option value="Ride-hailing">Ride-hailing</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-[#6c7075] dark:text-[#acb4c0] mb-1.5">
-                      Total budget (₦)
-                    </label>
-                    <input
-                      type="number"
-                      min={10000}
-                      step={10000}
-                      value={budget}
-                      onChange={(e) => setBudget(Number(e.target.value))}
-                      className="w-full bg-white dark:bg-[#141922] border border-[#dedfe2] dark:border-[#353c47] rounded-xl px-3.5 py-2.5 text-sm text-[#17191b] dark:text-[#f0f2f6] focus:outline-none focus:ring-2 focus:ring-[#ffbf00]"
-                      required
-                    />
-                  </div>
-                </div>
-
                 <div>
-                  <label className="block text-xs font-semibold text-[#6c7075] dark:text-[#acb4c0] mb-1.5">
-                    Anything else? <span className="text-gray-400 font-normal">Optional</span>
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    placeholder="Romantic dinner spots, child-friendly places, wheelchair access…"
-                    className="w-full bg-white dark:bg-[#141922] border border-[#dedfe2] dark:border-[#353c47] rounded-xl p-3 text-sm text-[#17191b] dark:text-[#f0f2f6] focus:outline-none focus:ring-2 focus:ring-[#ffbf00]"
-                  />
+                  <h2 className="text-sm font-extrabold text-[#17191b] dark:text-white">Your trip conversation</h2>
+                  <p className="text-xs text-[#777e87] dark:text-[#aab1bc]">Flexible, private and easy to change</p>
                 </div>
-              </section>
-
-              {/* Submit Button */}
-              <button
-                type="submit"
-                className="w-full py-3.5 px-6 bg-[#ffbf00] hover:bg-[#eeb200] text-[#17191b] font-bold text-base rounded-xl transition-all shadow-md flex items-center justify-center gap-2"
-              >
-                <span>Build my itinerary</span>
-                <span className="text-xl leading-none">✦</span>
-              </button>
-            </form>
-
-            {/* Aside */}
-            <aside className="bg-[#fff9e9] dark:bg-[#1c222c] border border-[#f4e5b9] dark:border-[#353c47] rounded-2xl p-6 sticky top-28">
-              <span className="block text-[11px] font-bold tracking-[1.5px] text-[#896300] dark:text-[#ffbf00] uppercase mb-1.5">
-                A LITTLE LESS PLANNING
-              </span>
-              <h2 className="font-display text-xl sm:text-2xl font-bold mb-2 text-[#17191b] dark:text-[#f0f2f6]">
-                A little more living.
-              </h2>
-              <p className="text-xs sm:text-sm text-[#686254] dark:text-[#acb4c0] mb-5">
-                Your stay is just the beginning. Bring the rest of your trip together seamlessly.
-              </p>
-              <ul className="space-y-2.5 text-xs sm:text-sm text-[#686254] dark:text-[#acb4c0] mb-6">
-                <li className="flex items-center gap-2">
-                  <span className="text-[#ffbf00] font-bold">✓</span> Activities organised by day
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="text-[#ffbf00] font-bold">✓</span> Estimated costs at a glance
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="text-[#ffbf00] font-bold">✓</span> Transport alongside your plans
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="text-[#ffbf00] font-bold">✓</span> Directions to each destination
-                </li>
-              </ul>
-              <div className="relative w-full h-40 rounded-xl overflow-hidden">
-                <Image
-                  src="https://images.unsplash.com/photo-1582719508461-905c673771fd?w=600&auto=format&fit=crop&q=80"
-                  alt="Palm resort pool"
-                  fill
-                  sizes="(max-width: 1024px) 100vw, 360px"
-                  className="object-cover"
-                />
               </div>
-            </aside>
-          </div>
-        </div>
-      ) : (
-        /* Itinerary View */
-        <div>
-          {/* Back link */}
-          <button
-            onClick={() => setStep('form')}
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#6c7075] dark:text-[#acb4c0] hover:text-[#17191b] dark:hover:text-white mb-6"
-          >
-            <ArrowLeft size={14} />
-            <span>Edit trip preferences</span>
-          </button>
-
-          {/* Intro */}
-          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6">
-            <div>
-              <span className="block text-xs font-bold tracking-[1.7px] text-[#896300] dark:text-[#ffbf00] uppercase mb-2">
-                YOUR TRIP, BROUGHT TOGETHER
-              </span>
-              <h1 className="font-display text-3xl sm:text-4xl font-extrabold text-[#17191b] dark:text-[#f0f2f6] tracking-tight">
-                Your {city} itinerary
-              </h1>
-              <p className="text-sm text-[#6c7075] dark:text-[#acb4c0] mt-1.5">
-                {startDate} — {endDate} · {tripDays} days · {travellers} travellers · {pace} pace
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => toast.success('Itinerary saved for this session!')}
-                className="inline-flex items-center gap-1.5 px-4 py-2 border border-[#e7e8eb] dark:border-[#353c47] bg-white dark:bg-[#1c222c] rounded-xl text-xs font-semibold text-[#17191b] dark:text-[#f0f2f6] hover:border-[#ffbf00] transition-colors"
-              >
-                <Bookmark size={15} />
-                <span>Save itinerary</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Banner */}
-          <div className="banner-gradient rounded-2xl p-5 sm:p-6 mb-7 flex items-center gap-4">
-            <div className="text-3xl text-[#dc9d00] dark:text-[#ffbf00] leading-none">✦</div>
-            <div>
-              <h2 className="font-display text-lg sm:text-xl font-bold text-[#17191b] dark:text-white">
-                {pace} days, built around you.
-              </h2>
-              <p className="text-xs sm:text-sm text-[#62605a] dark:text-[#acb4c0]">
-                Curated suggestions for {selectedInterests.join(', ').toLowerCase()}.
-              </p>
-            </div>
-          </div>
-
-          {/* Day Tabs */}
-          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar mb-7 pb-1">
-            {Array.from({ length: tripDays }, (_, i) => (
-              <button
-                key={i + 1}
-                onClick={() => setSelectedDay(i + 1)}
-                className={`px-5 py-2.5 rounded-xl text-sm font-semibold border transition-all ${
-                  selectedDay === i + 1
-                    ? 'bg-[#ffbf00] border-[#ffbf00] text-[#17191b] shadow-sm'
-                    : 'bg-white dark:bg-[#1c222c] border-[#e7e8eb] dark:border-[#353c47] text-[#6c7075] dark:text-[#acb4c0] hover:border-[#ffbf00]'
-                }`}
-              >
-                Day {i + 1}
-              </button>
-            ))}
-          </div>
-
-          {/* Main Layout: Timeline & Spend Side */}
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_350px] gap-8 items-start">
-            {/* Timeline */}
-            <div className="relative pl-5 sm:pl-6 border-l-2 border-[#e2b542] dark:border-[#866000] space-y-6">
-              {currentDayActivities.map((act, index) => (
-                <article
-                  key={index}
-                  className="relative bg-white dark:bg-[#1c222c] border border-[#e7e8eb] dark:border-[#353c47] rounded-2xl p-4 sm:p-6 shadow-sm"
+              {messages.length > 1 && (
+                <button
+                  onClick={resetPlanner}
+                  className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold text-[#6d737b] transition hover:bg-[#f5f6f7] hover:text-[#17191b] dark:hover:bg-[#252c36] dark:hover:text-white"
                 >
-                  {/* Circle dot on timeline */}
-                  <div className="absolute -left-[27px] sm:-left-[31px] top-6 w-3 h-3 rounded-full bg-[#ffbf00] border-4 border-[#fff9e9] dark:border-[#302916] box-content" />
+                  <RotateCcw size={14} /> Start over
+                </button>
+              )}
+            </div>
 
-                  <div className="flex items-start justify-between gap-3 sm:gap-4 mb-2">
-                    <div>
-                      <span className="text-[10px] sm:text-[11px] font-bold text-[#997000] dark:text-[#ffbf00] tracking-wider uppercase">
-                        {act.time}
-                      </span>
-                      <h3 className="font-display text-base sm:text-lg font-bold text-[#17191b] dark:text-[#f0f2f6] mt-0.5">
-                        {act.title}
-                      </h3>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <span className="font-bold text-sm sm:text-base text-[#17191b] dark:text-[#f0f2f6]">
-                        ₦{numberWithCommas(act.pricePerPerson)}
-                      </span>
-                      <p className="text-[10px] sm:text-[11px] text-[#6c7075] dark:text-[#acb4c0]">est. / person</p>
+            <div className="max-h-[520px] min-h-[340px] space-y-4 overflow-y-auto px-5 py-6 sm:px-7">
+              {messages.map((message, index) => (
+                <div
+                  key={`${message.role}-${index}`}
+                  className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                >
+                  <div
+                    className={`max-w-[88%] rounded-2xl px-4 py-3 text-sm leading-6 sm:max-w-[78%] ${
+                      message.role === 'user'
+                        ? 'rounded-br-md bg-[#17191b] text-white dark:bg-[#ffbf00] dark:text-[#17191b]'
+                        : 'rounded-bl-md border border-[#eceef1] bg-[#f7f8fa] text-[#30353a] dark:border-[#353c47] dark:bg-[#141922] dark:text-[#e7eaf0]'
+                    }`}
+                  >
+                    {message.content}
+                  </div>
+                </div>
+              ))}
+              {loading && (
+                <div className="flex justify-start">
+                  <div className="inline-flex items-center gap-2 rounded-2xl rounded-bl-md border border-[#eceef1] bg-[#f7f8fa] px-4 py-3 text-sm text-[#6d737b] dark:border-[#353c47] dark:bg-[#141922] dark:text-[#b7bec8]">
+                    <Loader2 size={16} className="animate-spin text-[#c58f00]" />
+                    Checking AfriBooking stays first…
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="border-t border-[#eceef1] px-5 py-4 dark:border-[#353c47] sm:px-7">
+              <div className="mb-3 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none]">
+                {suggestions.map((suggestion) => (
+                  <button
+                    key={suggestion}
+                    type="button"
+                    onClick={() => void sendMessage(suggestion)}
+                    disabled={loading}
+                    className="shrink-0 rounded-full border border-[#e4e5e8] bg-white px-3.5 py-2 text-xs font-bold text-[#545a61] transition hover:border-[#e4aa00] hover:bg-[#fff9e8] disabled:cursor-not-allowed disabled:opacity-50 dark:border-[#3a424e] dark:bg-[#181d25] dark:text-[#c5cbd4] dark:hover:border-[#ffbf00]"
+                  >
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
+              <form onSubmit={handleSubmit} className="flex items-end gap-2 rounded-2xl border border-[#dfe1e5] bg-[#fafafa] p-2 focus-within:border-[#e0a600] focus-within:ring-4 focus-within:ring-[#ffbf00]/10 dark:border-[#3a424e] dark:bg-[#141922]">
+                <textarea
+                  ref={inputRef}
+                  value={input}
+                  onChange={(event) => setInput(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && !event.shiftKey) {
+                      event.preventDefault();
+                      void sendMessage(input);
+                    }
+                  }}
+                  rows={2}
+                  maxLength={1200}
+                  placeholder="Example: I’m going to Ikeja for a relaxed weekend with my partner…"
+                  className="max-h-32 min-h-[48px] flex-1 resize-none bg-transparent px-2 py-2 text-sm text-[#17191b] outline-none placeholder:text-[#9a9fa6] dark:text-white"
+                />
+                <button
+                  type="submit"
+                  disabled={!input.trim() || loading}
+                  aria-label="Send trip request"
+                  className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[#ffbf00] text-[#17191b] shadow-sm transition hover:bg-[#eeb200] disabled:cursor-not-allowed disabled:bg-[#e7e8eb] disabled:text-[#a0a4aa]"
+                >
+                  {loading ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
+                </button>
+              </form>
+              <p className="mt-2 text-center text-[10px] text-[#92979e]">
+                Recommendations are suggestions. Confirm prices, opening hours and availability before travelling.
+              </p>
+            </div>
+          </section>
+
+          <aside className="space-y-5 xl:sticky xl:top-24">
+            <section className="rounded-3xl border border-[#e8e9ec] bg-white p-5 dark:border-[#353c47] dark:bg-[#1c222c]">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[#8b6700] dark:text-[#ffbf00]">Trip snapshot</p>
+                  <h2 className="mt-1 text-lg font-black text-[#17191b] dark:text-white">
+                    {result?.intent.destination || 'Waiting for your destination'}
+                  </h2>
+                </div>
+                <div className="grid h-11 w-11 place-items-center rounded-2xl bg-[#fff5ce] text-[#ae7e00] dark:bg-[#312a17] dark:text-[#ffbf00]">
+                  <Compass size={21} />
+                </div>
+              </div>
+
+              {result ? (
+                <div className="mt-5 grid grid-cols-2 gap-2.5">
+                  <SnapshotItem icon={CalendarDays} label="Length" value={result.intent.durationDays ? `${result.intent.durationDays} days` : result.intent.startDate || 'Flexible'} />
+                  <SnapshotItem icon={Users} label="Guests" value={result.intent.guests ? String(result.intent.guests) : 'Flexible'} />
+                  <SnapshotItem icon={Wallet} label="Budget" value={result.intent.budget ? formatNaira(result.intent.budget) : 'Flexible'} />
+                  <SnapshotItem icon={Sparkles} label="Pace" value={result.intent.pace || 'Flexible'} />
+                </div>
+              ) : (
+                <div className="mt-5 rounded-2xl border border-dashed border-[#dfe1e5] p-4 text-sm leading-6 text-[#777e87] dark:border-[#3a424e] dark:text-[#aeb5bf]">
+                  As you chat, your destination, budget, dates and interests will appear here automatically.
+                </div>
+              )}
+            </section>
+
+            {result && (
+              <section className="rounded-3xl border border-[#e8e9ec] bg-white p-5 dark:border-[#353c47] dark:bg-[#1c222c]">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[#8b6700] dark:text-[#ffbf00]">AfriBooking inventory first</p>
+                    <h2 className="mt-1 text-lg font-black text-[#17191b] dark:text-white">
+                      {result.apartments.length
+                        ? `${result.apartments.length} matching stay${result.apartments.length === 1 ? '' : 's'}`
+                        : 'No matching stay yet'}
+                    </h2>
+                  </div>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-[#ecf8ef] px-2.5 py-1 text-[10px] font-extrabold text-[#24733a] dark:bg-[#173322] dark:text-[#84d99a]">
+                    <Check size={11} /> Searched first
+                  </span>
+                </div>
+
+                {selectedApartment ? (
+                  <div className="mt-4 overflow-hidden rounded-2xl border border-[#e8e9ec] dark:border-[#353c47]">
+                    {selectedApartment.image ? (
+                      <div className="relative h-36 w-full bg-[#eef0f2]">
+                        <Image
+                          src={selectedApartment.image}
+                          alt={selectedApartment.name}
+                          fill
+                          unoptimized
+                          sizes="(max-width: 1280px) 100vw, 420px"
+                          className="object-cover"
+                        />
+                      </div>
+                    ) : (
+                      <div className="grid h-28 place-items-center bg-[#f2f3f5] text-[#a2a7ae] dark:bg-[#141922]">
+                        <BedDouble size={28} />
+                      </div>
+                    )}
+                    <div className="p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <h3 className="truncate text-sm font-extrabold text-[#17191b] dark:text-white">{selectedApartment.name}</h3>
+                          <p className="mt-1 flex items-center gap-1 truncate text-xs text-[#777e87] dark:text-[#aeb5bf]">
+                            <MapPin size={12} /> {selectedApartment.neighborhood || selectedApartment.city}, {selectedApartment.state}
+                          </p>
+                        </div>
+                        <p className="shrink-0 text-right text-xs font-black text-[#17191b] dark:text-white">
+                          {formatNaira(selectedApartment.pricePerNight)}
+                          <span className="block font-medium text-[#8a9098]">per night</span>
+                        </p>
+                      </div>
+                      <div className="mt-3 flex items-center gap-3 text-[11px] font-semibold text-[#686e76] dark:text-[#b7bec8]">
+                        <span>{selectedApartment.bedrooms} bedrooms</span>
+                        <span>•</span>
+                        <span>Up to {selectedApartment.guests} guests</span>
+                      </div>
+                      <Link
+                        href={`/apartments/${selectedApartment.id}`}
+                        className="mt-4 flex items-center justify-center gap-1.5 rounded-xl bg-[#17191b] px-4 py-2.5 text-xs font-extrabold text-white transition hover:bg-[#303438] dark:bg-[#ffbf00] dark:text-[#17191b]"
+                      >
+                        View recommended stay <ArrowRight size={14} />
+                      </Link>
                     </div>
                   </div>
-
-                  <p className="text-xs text-[#6c7075] dark:text-[#acb4c0] mb-2">{act.category} · Suggested activity</p>
-
-                  <p className="flex items-center text-xs text-[#6c7075] dark:text-[#acb4c0] mb-4">
-                    <MapPin size={14} className="mr-1.5 text-[#ffbf00] shrink-0" />
-                    <span className="truncate">{act.location}</span>
+                ) : (
+                  <p className="mt-4 rounded-2xl bg-[#fff7dc] p-4 text-sm leading-6 text-[#6f570d] dark:bg-[#302916] dark:text-[#efcf77]">
+                    Try a nearby neighbourhood or another destination where AfriBooking currently has published stays.
                   </p>
+                )}
+              </section>
+            )}
+          </aside>
+        </div>
 
-                  <div className="flex flex-wrap items-center gap-2">
-                    <a
-                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-                        act.title + ' ' + act.location
-                      )}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-[#e7e8eb] dark:border-[#353c47] rounded-lg text-xs font-semibold hover:border-[#ffbf00] transition-colors"
-                    >
-                      <ExternalLink size={13} />
-                      <span>Directions</span>
-                    </a>
-                    <button
-                      onClick={() => toast.success('Venue contacts available on verified bookings.')}
-                      className="px-3 py-1.5 border border-[#e7e8eb] dark:border-[#353c47] rounded-lg text-xs font-semibold hover:border-[#ffbf00] transition-colors text-[#6c7075] dark:text-[#acb4c0]"
-                    >
-                      Contact venue
-                    </button>
-                  </div>
-                </article>
+        {result?.itinerary && result.itinerary.days.length > 0 && (
+          <section className="mt-6 rounded-3xl border border-[#e8e9ec] bg-white p-5 sm:p-7 dark:border-[#353c47] dark:bg-[#1c222c]">
+            <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+              <div>
+                <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[#8b6700] dark:text-[#ffbf00]">Your evolving itinerary</p>
+                <h2 className="mt-1 font-display text-2xl font-black text-[#17191b] dark:text-white">{result.itinerary.title}</h2>
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-[#6f757d] dark:text-[#b3bac4]">{result.itinerary.summary}</p>
+              </div>
+              {result.itinerary.estimatedActivityCost !== undefined && (
+                <div className="rounded-2xl bg-[#fff7d8] px-4 py-3 text-right dark:bg-[#302916]">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-[#8b6700]">Estimated activities</p>
+                  <p className="text-lg font-black text-[#17191b] dark:text-white">{formatNaira(result.itinerary.estimatedActivityCost)}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-6 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none]">
+              {result.itinerary.days.map((day) => (
+                <button
+                  key={day.day}
+                  onClick={() => setSelectedDay(day.day)}
+                  className={`shrink-0 rounded-xl border px-4 py-2.5 text-xs font-extrabold transition ${
+                    selectedItineraryDay?.day === day.day
+                      ? 'border-[#ffbf00] bg-[#ffbf00] text-[#17191b]'
+                      : 'border-[#e3e5e8] bg-white text-[#656b73] hover:border-[#e0aa0a] dark:border-[#3a424e] dark:bg-[#141922] dark:text-[#c0c6cf]'
+                  }`}
+                >
+                  Day {day.day}
+                </button>
               ))}
             </div>
 
-            {/* Trip Spend Side Summary */}
-            <aside className="bg-[#fff9e9] dark:bg-[#1c222c] border border-[#f4e5b9] dark:border-[#353c47] rounded-2xl p-6 sticky top-28 space-y-4">
-              <div>
-                <span className="block text-[11px] font-bold tracking-[1.5px] text-[#896300] dark:text-[#ffbf00] uppercase mb-1">
-                  DAY {selectedDay} · ESTIMATED SPEND
-                </span>
-                <h2 className="font-display text-2xl font-extrabold text-[#17191b] dark:text-[#f0f2f6]">
-                  ₦{numberWithCommas(dayTotal)}
-                </h2>
+            {selectedItineraryDay && (
+              <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {selectedItineraryDay.activities.map((activity, index) => (
+                  <article key={`${activity.title}-${index}`} className="rounded-2xl border border-[#e8e9ec] p-5 dark:border-[#353c47] dark:bg-[#181d25]">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[10px] font-extrabold uppercase tracking-wide text-[#9a7000] dark:text-[#ffbf00]">{activity.time}</span>
+                      <span className="rounded-full bg-[#f3f4f5] px-2 py-1 text-[10px] font-bold text-[#686e76] dark:bg-[#252c36] dark:text-[#c3c9d2]">{activity.category}</span>
+                    </div>
+                    <h3 className="mt-3 text-base font-black text-[#17191b] dark:text-white">{activity.title}</h3>
+                    <p className="mt-2 flex items-start gap-1.5 text-xs leading-5 text-[#7a8088] dark:text-[#aeb5bf]"><MapPin size={13} className="mt-0.5 shrink-0" /> {activity.location}</p>
+                    <p className="mt-3 text-sm leading-6 text-[#555b62] dark:text-[#c3c9d2]">{activity.description}</p>
+                    {activity.estimatedCostPerPerson !== undefined && (
+                      <p className="mt-4 text-xs font-extrabold text-[#17191b] dark:text-white">About {formatNaira(activity.estimatedCostPerPerson)} per person</p>
+                    )}
+                  </article>
+                ))}
               </div>
-
-              <div className="space-y-2 border-t border-[#e7dcb7] dark:border-[#353c47] pt-3 text-xs sm:text-sm">
-                <div className="flex items-center justify-between text-[#686254] dark:text-[#acb4c0]">
-                  <span>Activities · {travellers} people</span>
-                  <span className="font-semibold text-[#17191b] dark:text-white">
-                    ₦{numberWithCommas(activityTotal)}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-[#686254] dark:text-[#acb4c0]">
-                  <span>{transport}</span>
-                  <span className="font-semibold text-[#17191b] dark:text-white">
-                    ₦{numberWithCommas(transportCost)}
-                  </span>
-                </div>
-              </div>
-
-              <div className="border-t border-[#e7dcb7] dark:border-[#353c47] pt-3">
-                <p className="text-xs text-[#686254] dark:text-[#acb4c0]">
-                  Trip budget: <strong className="text-[#17191b] dark:text-white">₦{numberWithCommas(budget)}</strong>
-                </p>
-                <div className="w-full bg-[#dedfe2] dark:bg-gray-700 h-2 rounded-full overflow-hidden mt-2">
-                  <div
-                    className="bg-[#ffbf00] h-full transition-all"
-                    style={{
-                      width: `${Math.min(100, Math.round((dayTotal / budget) * 100))}%`,
-                    }}
-                  />
-                </div>
-                <p className="text-[11px] text-[#6c7075] dark:text-[#acb4c0] mt-1.5">
-                  This day accounts for {Math.round((dayTotal / budget) * 100)}% of your overall budget.
-                </p>
-              </div>
-
-              <Link
-                href="/apartments"
-                className="w-full py-3 bg-[#ffbf00] hover:bg-[#eeb200] text-[#17191b] font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-sm"
-              >
-                <span>Find stays in {city}</span>
-                <span>→</span>
-              </Link>
-            </aside>
-          </div>
-        </div>
-      )}
+            )}
+          </section>
+        )}
+      </main>
     </AppShell>
+  );
+}
+
+function SnapshotItem({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: typeof CalendarDays;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-2xl bg-[#f7f8fa] p-3 dark:bg-[#141922]">
+      <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-[#858b93]">
+        <Icon size={12} /> {label}
+      </div>
+      <p className="mt-1.5 truncate text-xs font-extrabold capitalize text-[#25292d] dark:text-white">{value}</p>
+    </div>
   );
 }
