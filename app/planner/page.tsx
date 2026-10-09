@@ -121,6 +121,7 @@ export default function TripPlannerPage() {
   const [result, setResult] = useState<PlannerResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [selectedDay, setSelectedDay] = useState(1);
+  const [failedTurn, setFailedTurn] = useState<{ message: string; error: string } | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const suggestions = useMemo(() => {
@@ -145,16 +146,16 @@ export default function TripPlannerPage() {
   const selectedItineraryDay =
     result?.itinerary?.days.find((day) => day.day === selectedDay) || result?.itinerary?.days[0];
 
-  const sendMessage = async (message: string) => {
+  const sendMessage = async (message: string, appendUser = true) => {
     const trimmed = message.trim();
     if (!trimmed || loading) return;
 
-    const nextMessages: ConversationMessage[] = [
-      ...messages,
-      { role: 'user', content: trimmed },
-    ];
-    setMessages(nextMessages);
+    const nextMessages: ConversationMessage[] = appendUser
+      ? [...messages, { role: 'user', content: trimmed }]
+      : messages;
+    if (appendUser) setMessages(nextMessages);
     setInput('');
+    setFailedTurn(null);
     setLoading(true);
 
     try {
@@ -182,13 +183,7 @@ export default function TripPlannerPage() {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to plan this trip right now';
       toast.error(message);
-      setMessages((current) => [
-        ...current,
-        {
-          role: 'assistant',
-          content: 'I couldn’t complete that step just now. Please try again in a moment.',
-        },
-      ]);
+      setFailedTurn({ message: trimmed, error: message });
     } finally {
       setLoading(false);
       window.setTimeout(() => inputRef.current?.focus(), 100);
@@ -204,6 +199,7 @@ export default function TripPlannerPage() {
     setMessages([initialMessage]);
     setInput('');
     setResult(null);
+    setFailedTurn(null);
     setSelectedDay(1);
     inputRef.current?.focus();
   };
@@ -270,6 +266,22 @@ export default function TripPlannerPage() {
                   <div className="inline-flex items-center gap-2 rounded-2xl rounded-bl-md border border-[#eceef1] bg-[#f7f8fa] px-4 py-3 text-sm text-[#6d737b] dark:border-[#353c47] dark:bg-[#141922] dark:text-[#b7bec8]">
                     <Loader2 size={16} className="animate-spin text-[#c58f00]" />
                     Checking AfriBooking stays first…
+                  </div>
+                </div>
+              )}
+              {failedTurn && !loading && (
+                <div className="flex justify-start">
+                  <div className="max-w-[88%] rounded-2xl rounded-bl-md border border-[#f0c8c8] bg-[#fff5f5] px-4 py-3 dark:border-[#5d3333] dark:bg-[#2a1b1e] sm:max-w-[78%]">
+                    <p className="text-sm leading-6 text-[#8d2f2f] dark:text-[#f0b1b1]">
+                      {failedTurn.error}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => void sendMessage(failedTurn.message, false)}
+                      className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-[#ddb4b4] bg-white px-3 py-1.5 text-xs font-extrabold text-[#7e2929] transition hover:border-[#bd7777] dark:border-[#684141] dark:bg-[#20171a] dark:text-[#f0b1b1]"
+                    >
+                      <RotateCcw size={13} /> Try this answer again
+                    </button>
                   </div>
                 </div>
               )}
