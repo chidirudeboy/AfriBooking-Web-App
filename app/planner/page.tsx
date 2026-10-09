@@ -168,9 +168,16 @@ export default function TripPlannerPage() {
           intent: result?.intent,
         }),
       });
-      const payload = await response.json();
-      if (!response.ok || !payload.success) {
-        throw new Error(payload.message || 'Unable to plan this trip right now');
+      const contentType = response.headers.get('content-type') || '';
+      const payload = contentType.includes('application/json')
+        ? await response.json()
+        : null;
+      if (!response.ok || !payload?.success) {
+        const fallbackMessage =
+          response.status === 504
+            ? 'Trip planning took too long. Please try this answer again.'
+            : 'Unable to plan this trip right now';
+        throw new Error(payload?.message || fallbackMessage);
       }
 
       const plannerResult = payload.data as PlannerResult;
@@ -181,7 +188,12 @@ export default function TripPlannerPage() {
         { role: 'assistant', content: plannerResult.reply },
       ]);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to plan this trip right now';
+      const rawMessage =
+        error instanceof Error ? error.message : 'Unable to plan this trip right now';
+      const message =
+        rawMessage === 'Failed to fetch'
+          ? 'The trip planner could not reach the server. Please try this answer again.'
+          : rawMessage;
       toast.error(message);
       setFailedTurn({ message: trimmed, error: message });
     } finally {
