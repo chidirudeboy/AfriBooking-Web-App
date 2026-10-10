@@ -1,9 +1,12 @@
 'use client';
 
-import { FormEvent, useMemo, useRef, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
+  Bookmark,
+  BookmarkCheck,
   ArrowRight,
   BedDouble,
   Bot,
@@ -12,15 +15,26 @@ import {
   Compass,
   Loader2,
   MapPin,
+  Plus,
   RotateCcw,
   Send,
+  Share2,
   Sparkles,
+  Trash2,
   Users,
   Wallet,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import AppShell from '@/components/AppShell';
-import { tripPlannerMessage } from '@/lib/endpoints';
+import { useAuth } from '@/contexts/AuthContext';
+import api from '@/lib/utils/api';
+import {
+  deleteTripPlan,
+  getTripPlan,
+  getTripPlans,
+  tripPlannerMessage,
+  updateTripPlan,
+} from '@/lib/endpoints';
 
 type ConversationMessage = {
   role: 'user' | 'assistant';
@@ -62,6 +76,16 @@ type ItineraryActivity = {
   location: string;
   description: string;
   estimatedCostPerPerson?: number;
+  sourceActivityId?: string;
+};
+
+type ActivityCandidate = {
+  id: string;
+  name: string;
+  address: string;
+  types: string[];
+  latitude?: number;
+  longitude?: number;
 };
 
 type ItineraryDay = {
@@ -74,9 +98,11 @@ type PlannerResult = {
   provider: string;
   reply: string;
   status: 'gathering' | 'ready' | 'no_inventory';
+  planId: string;
+  planStatus: 'draft' | 'saved';
   intent: TripIntent;
   apartments: ApartmentCandidate[];
-  activities: Array<{ id: string; name: string }>;
+  activities: ActivityCandidate[];
   itinerary?: {
     title: string;
     summary: string;
@@ -84,6 +110,18 @@ type PlannerResult = {
     estimatedActivityCost?: number;
     days: ItineraryDay[];
   };
+};
+
+type SavedPlan = {
+  _id: string;
+  title: string;
+  status: 'draft' | 'saved';
+  intent: TripIntent;
+  conversation?: ConversationMessage[];
+  apartments?: ApartmentCandidate[];
+  activities?: ActivityCandidate[];
+  itinerary?: PlannerResult['itinerary'];
+  updatedAt: string;
 };
 
 const starterPrompts = [
@@ -116,13 +154,39 @@ const formatNaira = (value: number) =>
   }).format(value);
 
 export default function TripPlannerPage() {
+  const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
   const [messages, setMessages] = useState<ConversationMessage[]>([initialMessage]);
   const [input, setInput] = useState('');
   const [result, setResult] = useState<PlannerResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [selectedDay, setSelectedDay] = useState(1);
   const [failedTurn, setFailedTurn] = useState<{ message: string; error: string } | null>(null);
+  const [planId, setPlanId] = useState<string | null>(null);
+  const [savedPlans, setSavedPlans] = useState<SavedPlan[]>([]);
+  const [plansLoading, setPlansLoading] = useState(true);
+  const [savingPlan, setSavingPlan] = useState(false);
+  const [activityCategory, setActivityCategory] = useState('All');
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (!authLoading && !user) router.replace('/login?redirect=/planner');
+  }, [authLoading, router, user]);
+
+  useEffect(() => {
+    if (!user) return;
+    const loadPlans = async () => {
+      try {
+        const response = await api.get(getTripPlans);
+        setSavedPlans(response.data?.data?.plans || []);
+      } catch (error: any) {
+        if (error.response?.status === 401) router.replace('/login?redirect=/planner');
+      } finally {
+        setPlansLoading(false);
+      }
+    };
+    void loadPlans();
+  }, [router, user]);
 
   const suggestions = useMemo(() => {
     if (!result) return starterPrompts;
@@ -146,6 +210,21 @@ export default function TripPlannerPage() {
   const selectedItineraryDay =
     result?.itinerary?.days.find((day) => day.day === selectedDay) || result?.itinerary?.days[0];
 
+  const activityCategories = useMemo(() => {
+    const categories = new Set(
+      (result?.activities || []).flatMap((activity) => activity.types.slice(0, 1))
+    );
+    return ['All', ...Array.from(categories)];
+  }, [result?.activities]);
+
+  const visibleActivities = useMemo(
+    () =>
+      (result?.activities || []).filter(
+        (activity) => activityCategory === 'All' || activity.types.includes(activityCategory)
+      ),
+    [activityCategory, result?.activities]
+  );
+
   const sendMessage = async (message: string, appendUser = true) => {
     const trimmed = message.trim();
     if (!trimmed || loading) return;
@@ -159,37 +238,43 @@ export default function TripPlannerPage() {
     setLoading(true);
 
     try {
-      const response = await fetch(tripPlannerMessage, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      const response = await api.post(tripPlannerMessage, {
           message: trimmed,
-          conversation: nextMessages.slice(-10),
+          planId,
           intent: result?.intent,
-        }),
       });
-      const contentType = response.headers.get('content-type') || '';
-      const payload = contentType.includes('application/json')
-        ? await response.json()
-        : null;
-      if (!response.ok || !payload?.success) {
-        const fallbackMessage =
-          response.status === 504
-            ? 'Trip planning took too long. Please try this answer again.'
-            : 'Unable to plan this trip right now';
-        throw new Error(payload?.message || fallbackMessage);
+      const payload = response.data;
+      if (!payload?.success) {
+        throw new Error(payload?.message || 'Unable to plan this trip right now');
       }
 
       const plannerResult = payload.data as PlannerResult;
+      setPlanId(plannerResult.planId);
       setResult(plannerResult);
       setSelectedDay(plannerResult.itinerary?.days[0]?.day || 1);
       setMessages((current) => [
         ...current,
         { role: 'assistant', content: plannerResult.reply },
       ]);
+      setSavedPlans((current) => {
+        const summary: SavedPlan = {
+          _id: plannerResult.planId,
+          title: plannerResult.itinerary?.title || `${plannerResult.intent.destination || 'My'} trip`,
+          status: plannerResult.planStatus,
+          intent: plannerResult.intent,
+          itinerary: plannerResult.itinerary,
+          updatedAt: new Date().toISOString(),
+        };
+        return [summary, ...current.filter((plan) => plan._id !== summary._id)];
+      });
     } catch (error) {
-      const rawMessage =
-        error instanceof Error ? error.message : 'Unable to plan this trip right now';
+      const requestError = error as any;
+      if (requestError.response?.status === 401) {
+        router.replace('/login?redirect=/planner');
+        return;
+      }
+      const rawMessage = requestError.response?.data?.message ||
+        (error instanceof Error ? error.message : 'Unable to plan this trip right now');
       const message =
         rawMessage === 'Failed to fetch'
           ? 'The trip planner could not reach the server. Please try this answer again.'
@@ -213,8 +298,171 @@ export default function TripPlannerPage() {
     setResult(null);
     setFailedTurn(null);
     setSelectedDay(1);
+    setPlanId(null);
     inputRef.current?.focus();
   };
+
+  const resumePlan = async (selectedPlanId: string) => {
+    try {
+      setPlansLoading(true);
+      const response = await api.get(getTripPlan(selectedPlanId));
+      const plan = response.data?.data?.plan as SavedPlan;
+      setPlanId(plan._id);
+      setMessages(plan.conversation?.length ? plan.conversation : [initialMessage]);
+      setResult({
+        provider: 'saved',
+        reply: plan.conversation?.at(-1)?.content || 'Your trip is ready to continue.',
+        status: plan.itinerary ? 'ready' : 'gathering',
+        planId: plan._id,
+        planStatus: plan.status,
+        intent: plan.intent,
+        apartments: plan.apartments || [],
+        activities: plan.activities || [],
+        itinerary: plan.itinerary,
+      });
+      setSelectedDay(plan.itinerary?.days?.[0]?.day || 1);
+      setActivityCategory('All');
+      toast.success('Trip restored');
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Unable to restore this trip');
+    } finally {
+      setPlansLoading(false);
+    }
+  };
+
+  const persistPlan = async (
+    itinerary: PlannerResult['itinerary'],
+    status: 'draft' | 'saved' = result?.planStatus || 'draft'
+  ) => {
+    if (!planId || !result) return;
+    setSavingPlan(true);
+    try {
+      await api.patch(updateTripPlan(planId), { itinerary, intent: result.intent, status });
+      setResult((current) => current ? { ...current, itinerary, planStatus: status } : current);
+      setSavedPlans((current) =>
+        current.map((plan) =>
+          plan._id === planId ? { ...plan, itinerary, status, updatedAt: new Date().toISOString() } : plan
+        )
+      );
+      if (status === 'saved') toast.success('Trip saved to your account');
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Unable to save trip changes');
+    } finally {
+      setSavingPlan(false);
+    }
+  };
+
+  const addActivity = async (activity: ActivityCandidate) => {
+    if (!result) return;
+    const existing = result.itinerary;
+    const targetDay = existing?.days.find((day) => day.day === selectedDay) || existing?.days[0];
+    if (targetDay?.activities.some((item) => item.sourceActivityId === activity.id)) {
+      toast('This activity is already in your plan');
+      return;
+    }
+
+    const itinerary = existing
+      ? {
+          ...existing,
+          days: existing.days.map((day) =>
+            day.day === (targetDay?.day || 1)
+              ? {
+                  ...day,
+                  activities: [
+                    ...day.activities,
+                    {
+                      time: 'Flexible',
+                      title: activity.name,
+                      category: activity.types[0]?.replaceAll('_', ' ') || 'Activity',
+                      location: activity.address,
+                      description: 'Added by you from verified nearby recommendations.',
+                      sourceActivityId: activity.id,
+                    },
+                  ],
+                }
+              : day
+          ),
+        }
+      : {
+          title: `${result.intent.destination || 'My'} itinerary`,
+          summary: 'A flexible plan you can continue shaping with AfriBooking AI.',
+          selectedApartmentId: selectedApartment?.id,
+          days: [
+            {
+              day: 1,
+              title: 'Your day',
+              activities: [
+                {
+                  time: 'Flexible',
+                  title: activity.name,
+                  category: activity.types[0]?.replaceAll('_', ' ') || 'Activity',
+                  location: activity.address,
+                  description: 'Added by you from verified nearby recommendations.',
+                  sourceActivityId: activity.id,
+                },
+              ],
+            },
+          ],
+        };
+
+    setSelectedDay(targetDay?.day || 1);
+    await persistPlan(itinerary);
+  };
+
+  const removeActivity = async (dayNumber: number, activityIndex: number) => {
+    if (!result?.itinerary) return;
+    const itinerary = {
+      ...result.itinerary,
+      days: result.itinerary.days.map((day) =>
+        day.day === dayNumber
+          ? { ...day, activities: day.activities.filter((_, index) => index !== activityIndex) }
+          : day
+      ),
+    };
+    await persistPlan(itinerary);
+  };
+
+  const sharePlan = async () => {
+    if (!result?.itinerary) return;
+    const itineraryText = result.itinerary.days
+      .map((day) => `Day ${day.day}: ${day.activities.map((activity) => activity.title).join(', ')}`)
+      .join('\n');
+    const text = `${result.itinerary.title}\n${result.itinerary.summary}\n\n${itineraryText}`;
+    try {
+      if (navigator.share) await navigator.share({ title: result.itinerary.title, text });
+      else {
+        await navigator.clipboard.writeText(text);
+        toast.success('Trip copied to your clipboard');
+      }
+    } catch (error) {
+      if ((error as Error).name !== 'AbortError') toast.error('Unable to share this trip');
+    }
+  };
+
+  const removePlan = async (selectedPlanId: string) => {
+    if (!window.confirm('Delete this trip permanently?')) return;
+    try {
+      await api.delete(deleteTripPlan(selectedPlanId));
+      setSavedPlans((current) => current.filter((plan) => plan._id !== selectedPlanId));
+      if (planId === selectedPlanId) resetPlanner();
+      toast.success('Trip deleted');
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Unable to delete this trip');
+    }
+  };
+
+  if (authLoading || !user) {
+    return (
+      <AppShell>
+        <div className="grid min-h-[55vh] place-items-center">
+          <div className="text-center">
+            <Loader2 className="mx-auto animate-spin text-[#d39b00]" size={30} />
+            <p className="mt-3 text-sm font-semibold text-[#777e87]">Opening your private trip workspace…</p>
+          </div>
+        </div>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell>
@@ -233,6 +481,71 @@ export default function TripPlannerPage() {
             </p>
           </div>
         </header>
+
+        <section className="mt-5 rounded-3xl border border-[#e8e9ec] bg-white p-4 sm:p-5 dark:border-[#353c47] dark:bg-[#1c222c]">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[#8b6700] dark:text-[#ffbf00]">Your private trip workspace</p>
+              <h2 className="mt-1 text-base font-black text-[#17191b] dark:text-white">Continue a trip or begin somewhere new</h2>
+            </div>
+            <button
+              type="button"
+              onClick={resetPlanner}
+              className="inline-flex items-center gap-2 rounded-xl bg-[#17191b] px-4 py-2.5 text-xs font-extrabold text-white transition hover:bg-[#303438] dark:bg-[#ffbf00] dark:text-[#17191b]"
+            >
+              <Plus size={15} /> New trip
+            </button>
+          </div>
+          <div className="mt-4 flex gap-3 overflow-x-auto pb-1 [scrollbar-width:none]">
+            {plansLoading ? (
+              <div className="inline-flex items-center gap-2 px-2 py-3 text-xs text-[#858b93]"><Loader2 size={14} className="animate-spin" /> Loading your trips…</div>
+            ) : savedPlans.length > 0 ? (
+              savedPlans.map((plan) => (
+                <div
+                  key={plan._id}
+                  className={`flex min-w-[230px] items-center gap-2 rounded-2xl border p-2 transition ${planId === plan._id ? 'border-[#e4aa00] bg-[#fff9e8] dark:bg-[#302916]' : 'border-[#e5e7ea] dark:border-[#3a424e]'}`}
+                >
+                  <button type="button" onClick={() => void resumePlan(plan._id)} className="min-w-0 flex-1 px-2 py-1 text-left">
+                    <p className="truncate text-xs font-extrabold text-[#25292d] dark:text-white">{plan.title}</p>
+                    <p className="mt-1 text-[10px] capitalize text-[#858b93]">{plan.intent?.destination || 'Trip in progress'} · {plan.status}</p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void removePlan(plan._id)}
+                    aria-label={`Delete ${plan.title}`}
+                    className="grid h-8 w-8 place-items-center rounded-lg text-[#9b7777] transition hover:bg-[#fff0f0] hover:text-[#a72c2c] dark:hover:bg-[#382124]"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))
+            ) : (
+              <p className="px-2 py-3 text-xs text-[#858b93]">Your trips will appear here automatically as you plan.</p>
+            )}
+          </div>
+        </section>
+
+        <section className="mt-5 rounded-3xl border border-[#eadfbd] bg-[#fffaf0] p-4 sm:p-5 dark:border-[#403821] dark:bg-[#1c1e20]">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="max-w-md">
+              <p className="text-xs font-black text-[#17191b] dark:text-white">Shape the trip visually or keep speaking naturally</p>
+              <p className="mt-1 text-[11px] leading-5 text-[#777e87]">These shortcuts become part of the same conversation—there is no rigid form to complete.</p>
+            </div>
+            <div className="flex max-w-3xl gap-2 overflow-x-auto pb-1 [scrollbar-width:none]">
+              {['2–3 days', 'Under ₦250,000', 'Food and culture', 'Nature and relaxation', 'Nightlife', 'Family activities'].map((preference) => (
+                <button
+                  key={preference}
+                  type="button"
+                  disabled={loading}
+                  onClick={() => void sendMessage(preference)}
+                  className="shrink-0 rounded-full border border-[#e4cf8f] bg-white px-3.5 py-2 text-xs font-extrabold text-[#635018] transition hover:border-[#e0a600] hover:bg-[#fff4c8] disabled:opacity-50 dark:border-[#4a422d] dark:bg-[#141922] dark:text-[#e8d99d]"
+                >
+                  {preference}
+                </button>
+              ))}
+            </div>
+          </div>
+        </section>
 
         <div className="mt-6 grid items-start gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)]">
           <section className="overflow-hidden rounded-3xl border border-[#e8e9ec] bg-white shadow-[0_14px_45px_rgba(20,24,30,0.06)] dark:border-[#353c47] dark:bg-[#1c222c]">
@@ -442,6 +755,60 @@ export default function TripPlannerPage() {
           </aside>
         </div>
 
+        {result?.activities && result.activities.length > 0 && (
+          <section className="mt-6 rounded-3xl border border-[#e8e9ec] bg-white p-5 sm:p-7 dark:border-[#353c47] dark:bg-[#1c222c]">
+            <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+              <div>
+                <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[#8b6700] dark:text-[#ffbf00]">Verified nearby recommendations</p>
+                <h2 className="mt-1 font-display text-2xl font-black text-[#17191b] dark:text-white">Choose what belongs in your trip</h2>
+                <p className="mt-2 text-sm text-[#737981] dark:text-[#b3bac4]">Add or remove activities—the itinerary remains yours to shape.</p>
+              </div>
+              <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none]">
+                {activityCategories.map((category) => (
+                  <button
+                    key={category}
+                    type="button"
+                    onClick={() => setActivityCategory(category)}
+                    className={`shrink-0 rounded-full border px-3.5 py-2 text-xs font-extrabold capitalize transition ${activityCategory === category ? 'border-[#ffbf00] bg-[#ffbf00] text-[#17191b]' : 'border-[#e3e5e8] text-[#646a72] dark:border-[#3a424e] dark:text-[#c0c6cf]'}`}
+                  >
+                    {category.replaceAll('_', ' ')}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {visibleActivities.map((activity) => {
+                const isAdded = Boolean(
+                  result.itinerary?.days.some((day) =>
+                    day.activities.some((item) => item.sourceActivityId === activity.id)
+                  )
+                );
+                return (
+                  <article key={activity.id} className="flex min-h-[180px] flex-col rounded-2xl border border-[#e8e9ec] p-5 dark:border-[#353c47] dark:bg-[#181d25]">
+                    <div className="flex items-start justify-between gap-3">
+                      <span className="rounded-full bg-[#fff3c1] px-2.5 py-1 text-[10px] font-extrabold capitalize text-[#765800] dark:bg-[#302916] dark:text-[#ffcf3f]">
+                        {(activity.types[0] || 'Activity').replaceAll('_', ' ')}
+                      </span>
+                      {isAdded && <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-[#2f7b45]"><Check size={12} /> In plan</span>}
+                    </div>
+                    <h3 className="mt-4 text-base font-black text-[#17191b] dark:text-white">{activity.name}</h3>
+                    <p className="mt-2 flex items-start gap-1.5 text-xs leading-5 text-[#7a8088] dark:text-[#aeb5bf]"><MapPin size={13} className="mt-0.5 shrink-0" /> {activity.address || result.intent.destination}</p>
+                    <button
+                      type="button"
+                      disabled={isAdded || savingPlan}
+                      onClick={() => void addActivity(activity)}
+                      className="mt-auto inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#17191b] px-4 py-2.5 text-xs font-extrabold text-white transition hover:bg-[#303438] disabled:bg-[#edf0f2] disabled:text-[#8b9198] dark:bg-[#ffbf00] dark:text-[#17191b] dark:disabled:bg-[#343a44] dark:disabled:text-[#8f96a1]"
+                    >
+                      {isAdded ? <><Check size={14} /> Added</> : <><Plus size={14} /> Add to plan</>}
+                    </button>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
         {result?.itinerary && result.itinerary.days.length > 0 && (
           <section className="mt-6 rounded-3xl border border-[#e8e9ec] bg-white p-5 sm:p-7 dark:border-[#353c47] dark:bg-[#1c222c]">
             <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
@@ -450,12 +817,30 @@ export default function TripPlannerPage() {
                 <h2 className="mt-1 font-display text-2xl font-black text-[#17191b] dark:text-white">{result.itinerary.title}</h2>
                 <p className="mt-2 max-w-3xl text-sm leading-6 text-[#6f757d] dark:text-[#b3bac4]">{result.itinerary.summary}</p>
               </div>
-              {result.itinerary.estimatedActivityCost !== undefined && (
-                <div className="rounded-2xl bg-[#fff7d8] px-4 py-3 text-right dark:bg-[#302916]">
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-[#8b6700]">Estimated activities</p>
-                  <p className="text-lg font-black text-[#17191b] dark:text-white">{formatNaira(result.itinerary.estimatedActivityCost)}</p>
-                </div>
-              )}
+              <div className="flex flex-wrap items-center gap-2">
+                {result.itinerary.estimatedActivityCost !== undefined && (
+                  <div className="mr-1 rounded-2xl bg-[#fff7d8] px-4 py-2.5 text-right dark:bg-[#302916]">
+                    <p className="text-[9px] font-bold uppercase tracking-wide text-[#8b6700]">Estimated activities</p>
+                    <p className="text-base font-black text-[#17191b] dark:text-white">{formatNaira(result.itinerary.estimatedActivityCost)}</p>
+                  </div>
+                )}
+                <button
+                  type="button"
+                  disabled={savingPlan || result.planStatus === 'saved'}
+                  onClick={() => void persistPlan(result.itinerary, 'saved')}
+                  className="inline-flex items-center gap-2 rounded-xl bg-[#ffbf00] px-4 py-3 text-xs font-extrabold text-[#17191b] transition hover:bg-[#eeb200] disabled:opacity-60"
+                >
+                  {savingPlan ? <Loader2 size={15} className="animate-spin" /> : result.planStatus === 'saved' ? <BookmarkCheck size={15} /> : <Bookmark size={15} />}
+                  {result.planStatus === 'saved' ? 'Saved' : 'Save plan'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void sharePlan()}
+                  className="inline-flex items-center gap-2 rounded-xl border border-[#dde0e4] px-4 py-3 text-xs font-extrabold text-[#4f555d] transition hover:border-[#d5a000] dark:border-[#3a424e] dark:text-[#d0d5dd]"
+                >
+                  <Share2 size={15} /> Share
+                </button>
+              </div>
             </div>
 
             <div className="mt-6 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none]">
@@ -477,7 +862,15 @@ export default function TripPlannerPage() {
             {selectedItineraryDay && (
               <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {selectedItineraryDay.activities.map((activity, index) => (
-                  <article key={`${activity.title}-${index}`} className="rounded-2xl border border-[#e8e9ec] p-5 dark:border-[#353c47] dark:bg-[#181d25]">
+                  <article key={`${activity.title}-${index}`} className="relative rounded-2xl border border-[#e8e9ec] p-5 dark:border-[#353c47] dark:bg-[#181d25]">
+                    <button
+                      type="button"
+                      onClick={() => void removeActivity(selectedItineraryDay.day, index)}
+                      className="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-lg text-[#9a7777] transition hover:bg-[#fff0f0] hover:text-[#a72c2c] dark:hover:bg-[#382124]"
+                      aria-label={`Remove ${activity.title}`}
+                    >
+                      <Trash2 size={14} />
+                    </button>
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-[10px] font-extrabold uppercase tracking-wide text-[#9a7000] dark:text-[#ffbf00]">{activity.time}</span>
                       <span className="rounded-full bg-[#f3f4f5] px-2 py-1 text-[10px] font-bold text-[#686e76] dark:bg-[#252c36] dark:text-[#c3c9d2]">{activity.category}</span>

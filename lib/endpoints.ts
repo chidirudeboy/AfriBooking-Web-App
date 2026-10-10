@@ -102,6 +102,10 @@ export const closeChat = (chatId: string) => endpoint2(`chat/${chatId}/close`);
 export const getNearbyPlaces = (latitude: number, longitude: number) =>
   endpoint2(`places/nearby?latitude=${encodeURIComponent(latitude)}&longitude=${encodeURIComponent(longitude)}`);
 export const tripPlannerMessage = endpoint2("trip-planner/message");
+export const getTripPlans = endpoint2("trip-planner/plans");
+export const getTripPlan = (planId: string) => endpoint2(`trip-planner/plans/${planId}`);
+export const updateTripPlan = (planId: string) => endpoint2(`trip-planner/plans/${planId}`);
+export const deleteTripPlan = (planId: string) => endpoint2(`trip-planner/plans/${planId}`);
 
 // Request endpoints
 export const createUserRequest = endpoint2("user/request/create");
