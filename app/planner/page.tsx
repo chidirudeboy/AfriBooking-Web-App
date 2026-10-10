@@ -363,27 +363,25 @@ export default function TripPlannerPage() {
       return;
     }
 
+    const newActivity: ItineraryActivity = {
+      time: 'Flexible',
+      title: activity.name,
+      category: activity.types[0]?.replaceAll('_', ' ') || 'Activity',
+      location: activity.address,
+      description: 'Added by you from verified nearby recommendations.',
+      sourceActivityId: activity.id,
+    };
+
     const itinerary = existing
       ? {
           ...existing,
-          days: existing.days.map((day) =>
-            day.day === (targetDay?.day || 1)
-              ? {
-                  ...day,
-                  activities: [
-                    ...day.activities,
-                    {
-                      time: 'Flexible',
-                      title: activity.name,
-                      category: activity.types[0]?.replaceAll('_', ' ') || 'Activity',
-                      location: activity.address,
-                      description: 'Added by you from verified nearby recommendations.',
-                      sourceActivityId: activity.id,
-                    },
-                  ],
-                }
-              : day
-          ),
+          days: existing.days.length
+            ? existing.days.map((day) =>
+                day.day === (targetDay?.day || 1)
+                  ? { ...day, activities: [...day.activities, newActivity] }
+                  : day
+              )
+            : [{ day: 1, title: 'Your day', activities: [newActivity] }],
         }
       : {
           title: `${result.intent.destination || 'My'} itinerary`,
@@ -393,16 +391,7 @@ export default function TripPlannerPage() {
             {
               day: 1,
               title: 'Your day',
-              activities: [
-                {
-                  time: 'Flexible',
-                  title: activity.name,
-                  category: activity.types[0]?.replaceAll('_', ' ') || 'Activity',
-                  location: activity.address,
-                  description: 'Added by you from verified nearby recommendations.',
-                  sourceActivityId: activity.id,
-                },
-              ],
+              activities: [newActivity],
             },
           ],
         };
