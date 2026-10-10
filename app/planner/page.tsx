@@ -170,7 +170,9 @@ export default function TripPlannerPage() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    if (!authLoading && !user) router.replace('/login?redirect=/planner');
+    if (authLoading || user) return;
+    const storedUser = window.localStorage.getItem('user');
+    if (!storedUser) router.replace('/login?returnTo=/planner');
   }, [authLoading, router, user]);
 
   useEffect(() => {
@@ -180,7 +182,7 @@ export default function TripPlannerPage() {
         const response = await api.get(getTripPlans);
         setSavedPlans(response.data?.data?.plans || []);
       } catch (error: any) {
-        if (error.response?.status === 401) router.replace('/login?redirect=/planner');
+        if (error.response?.status === 401) router.replace('/login?returnTo=/planner');
       } finally {
         setPlansLoading(false);
       }
@@ -270,7 +272,7 @@ export default function TripPlannerPage() {
     } catch (error) {
       const requestError = error as any;
       if (requestError.response?.status === 401) {
-        router.replace('/login?redirect=/planner');
+        router.replace('/login?returnTo=/planner');
         return;
       }
       const rawMessage = requestError.response?.data?.message ||

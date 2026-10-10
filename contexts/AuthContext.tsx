@@ -172,7 +172,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               localStorage.removeItem('user');
               return;
             }
-            
+
+            api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
             setUser(parsedUser);
             setLastActivity(Date.now());
             getProfile(token);
