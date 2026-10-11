@@ -77,6 +77,8 @@ type TripIntent = {
   pace?: 'relaxed' | 'balanced' | 'packed';
   transport?: string;
   activityRadiusKm?: number;
+  activityCategory?: string;
+  activitySubcategories?: string[];
   activityLocation?: {
     name: string;
     address?: string;
@@ -227,6 +229,27 @@ const quickChoiceGroups = [
   },
 ];
 
+type ActivityCategoryDefinition = { id: string; label: string; emoji: string; subcategories: Array<{ id: string; label: string }> };
+const activityTaxonomy: ActivityCategoryDefinition[] = [
+  { id: 'food', label: 'Food & Cafés', emoji: '☕', subcategories: [
+    ['cafes', 'Cafés'], ['coffee', 'Coffee Shops'], ['breakfast', 'Breakfast Restaurants'], ['brunch', 'Brunch Spots'], ['fine_dining', 'Fine Dining'], ['rooftop', 'Rooftop Restaurants'], ['local_food', 'Local Food'], ['fast_food', 'Fast Food'], ['street_food', 'Street Food'], ['seafood', 'Seafood'], ['barbecue', 'Barbecue & Grills'], ['pizza', 'Pizza'], ['shawarma', 'Shawarma'], ['ice_cream', 'Ice Cream'], ['bakeries', 'Bakeries'], ['desserts', 'Desserts'], ['juice', 'Juice & Smoothies'], ['tea', 'Tea Lounges'], ['buffet', 'Buffets'], ['waterfront', 'Waterfront Restaurants'], ['romantic', 'Romantic Dinner'], ['private_dining', 'Private Dining'], ['food_courts', 'Food Courts'], ['food_festivals', 'Food Festivals'], ['cooking_classes', 'Cooking Classes'],
+  ].map(([id, label]) => ({ id, label })) },
+  { id: 'nightlife', label: 'Nightlife', emoji: '🍸', subcategories: [['nightclubs','Nightclubs'],['lounges','Lounges'],['rooftop_bars','Rooftop Bars'],['cocktail_bars','Cocktail Bars'],['beach_clubs','Beach Clubs'],['pool_parties','Pool Parties'],['karaoke','Karaoke'],['live_music','Live Music'],['comedy','Comedy Shows'],['private_parties','Private Parties']].map(([id,label]) => ({id,label})) },
+  { id: 'wellness', label: 'Wellness & Fitness', emoji: '🧘', subcategories: [['spas','Spas & Massage'],['gyms','Gyms'],['yoga','Yoga & Pilates'],['pools','Swimming Pools'],['sauna','Sauna & Steam'],['personal_training','Personal Training'],['martial_arts','Boxing & Martial Arts'],['retreats','Wellness Retreats'],['meditation','Meditation'],['physiotherapy','Physiotherapy']].map(([id,label]) => ({id,label})) },
+  { id: 'beauty', label: 'Beauty', emoji: '💇', subcategories: [['hair_salons','Hair Salons'],['barbers','Barbershops'],['nails','Nail Studios'],['makeup','Makeup Artists'],['tattoos','Tattoo Studios'],['piercing','Piercing Studios'],['lashes','Lashes & Brows'],['skincare','Skincare & Facials'],['braiding','Hair Braiding'],['teeth','Teeth Whitening']].map(([id,label]) => ({id,label})) },
+  { id: 'transport', label: 'Car Rentals', emoji: '🚗', subcategories: [['car_rentals','Self-drive Cars'],['chauffeur','Chauffeur Services'],['airport_transfers','Airport Transfers'],['bus_rentals','Bus Rentals'],['shuttles','Private Shuttles'],['motorbikes','Motorbike Rentals'],['bicycles','Bicycle Rentals'],['group_transport','Group Transport']].map(([id,label]) => ({id,label})) },
+  { id: 'boat_beach', label: 'Boat & Beach', emoji: '🛥️', subcategories: [['cruises','Boat Cruises'],['yacht_rentals','Yacht Rentals'],['yacht_parties','Yacht Parties'],['speedboats','Speedboats'],['beaches','Beaches'],['beach_clubs','Beach Clubs'],['jet_skiing','Jet Skiing'],['kayaking','Kayaking'],['diving','Snorkelling & Diving']].map(([id,label]) => ({id,label})) },
+  { id: 'adventure', label: 'Adventure', emoji: '🏝️', subcategories: [['tours','City Tours'],['sightseeing','Sightseeing'],['museums','Museums'],['galleries','Art Galleries'],['historical','Historical Sites'],['parks','Nature Parks'],['wildlife','Wildlife Parks'],['waterfalls','Waterfalls'],['hiking','Hiking & Mountains'],['theme_parks','Theme Parks']].map(([id,label]) => ({id,label})) },
+  { id: 'shopping', label: 'Shopping', emoji: '🛍️', subcategories: [['malls','Shopping Malls'],['supermarkets','Supermarkets'],['boutiques','Fashion Boutiques'],['luxury_fashion','Luxury Fashion'],['markets','Local Markets'],['jewelry','Jewellery & Watches'],['electronics','Electronics'],['books','Bookshops'],['gifts','Gift Shops'],['decor','Home Décor']].map(([id,label]) => ({id,label})) },
+  { id: 'sports', label: 'Games & Sports', emoji: '🎳', subcategories: [['bowling','Bowling'],['billiards','Snooker & Billiards'],['arcades','Arcades'],['virtual_reality','Virtual Reality'],['escape_rooms','Escape Rooms'],['go_karting','Go-karting'],['paintball','Paintball & Laser Tag'],['board_games','Board Games'],['mini_golf','Mini Golf'],['trampoline','Trampoline Parks']].map(([id,label]) => ({id,label})) },
+  { id: 'photo', label: 'Photo & Content', emoji: '📸', subcategories: [['studios','Photography Studios'],['outdoor_shoots','Outdoor Photoshoots'],['video_studios','Video Studios'],['podcast_studios','Podcast Studios'],['music_studios','Music Studios'],['content_studios','Content Studios'],['filming_locations','Filming Locations'],['equipment','Equipment Rentals']].map(([id,label]) => ({id,label})) },
+  { id: 'workspaces', label: 'Workspaces', emoji: '💻', subcategories: [['coworking','Coworking Spaces'],['private_offices','Private Offices'],['meeting_rooms','Meeting Rooms'],['conference','Conference Centres'],['training_rooms','Training Rooms'],['lounges','Business Lounges'],['printing','Printing Centres'],['event_halls','Event Halls'],['networking','Networking Spaces']].map(([id,label]) => ({id,label})) },
+  { id: 'family', label: 'Family Fun', emoji: '🎡', subcategories: [['cinemas','Cinemas'],['playgrounds','Playgrounds'],['indoor_play','Indoor Play Centres'],['amusement','Amusement Parks'],['water_parks','Water Parks'],['resorts','Family Resorts'],['museums','Educational Museums'],['workshops','Kids Workshops'],['birthdays','Birthday Venues']].map(([id,label]) => ({id,label})) },
+  { id: 'romance', label: 'Romantic Dates', emoji: '❤️', subcategories: [['dinners','Romantic Dinners'],['couples_spa','Couples Spa'],['private_cinema','Private Cinemas'],['cruises','Sunset Cruises'],['picnics','Beach Picnics'],['photoshoots','Couples Photoshoots'],['private_chefs','Private Chef Dinners'],['wine_tasting','Wine Tasting'],['proposals','Proposal Experiences'],['anniversaries','Anniversary Venues']].map(([id,label]) => ({id,label})) },
+  { id: 'essentials', label: 'Essentials', emoji: '🧺', subcategories: [['pharmacies','Pharmacies'],['hospitals','Hospitals & Clinics'],['dental','Dental Clinics'],['laundry','Laundry & Dry Cleaning'],['groceries','Grocery Delivery'],['food_delivery','Food Delivery'],['personal_chefs','Personal Chefs'],['home_cleaning','Home Cleaning'],['babysitting','Babysitting'],['banks','Banks & ATMs']].map(([id,label]) => ({id,label})) },
+  { id: 'events', label: 'Events', emoji: '🎟️', subcategories: [['concerts','Concerts'],['comedy','Comedy Shows'],['theatre','Theatre'],['fashion','Fashion Shows'],['exhibitions','Art Exhibitions'],['food_festivals','Food Festivals'],['film_festivals','Film Festivals'],['conferences','Tech Conferences'],['business','Business Events'],['cultural','Cultural Festivals']].map(([id,label]) => ({id,label})) },
+];
+
 const answerSuggestions: Record<string, string[]> = {
   destination: ['Ikeja, Lagos', 'Jos, Plateau', 'Abuja'],
   datesOrDuration: ['This weekend', '3 days', '5 days'],
@@ -280,6 +303,8 @@ const normalizePlannerResult = (raw: any): PlannerResult => {
     intent: {
       ...intent,
       interests: Array.isArray(intent.interests) ? intent.interests : [],
+      activityCategory: typeof intent.activityCategory === 'string' ? intent.activityCategory : 'all',
+      activitySubcategories: Array.isArray(intent.activitySubcategories) ? intent.activitySubcategories : [],
       missingFields: Array.isArray(intent.missingFields) ? intent.missingFields : [],
     },
     apartments: Array.isArray(raw?.apartments) ? raw.apartments.map((apartment: any) => ({
@@ -354,7 +379,8 @@ export default function TripPlannerPage() {
   const [locationSearching, setLocationSearching] = useState(false);
   const [placeSearchMode, setPlaceSearchMode] = useState<'area' | 'place'>('area');
   const [staySkipped, setStaySkipped] = useState(false);
-  const [activityCategory, setActivityCategory] = useState('All');
+  const [selectedActivityCategory, setSelectedActivityCategory] = useState('all');
+  const [selectedActivitySubcategories, setSelectedActivitySubcategories] = useState<string[]>([]);
   const [activityPage, setActivityPage] = useState(1);
   const [failedActivityImages, setFailedActivityImages] = useState<Set<string>>(new Set());
   const [stayDecisionLoading, setStayDecisionLoading] = useState(false);
@@ -449,20 +475,8 @@ export default function TripPlannerPage() {
   const selectedItineraryDay =
     result?.itinerary?.days?.find((day) => day.day === selectedDay) || result?.itinerary?.days?.[0];
 
-  const activityCategories = useMemo(() => {
-    const categories = new Set(
-      (result?.activities || []).flatMap((activity) => (activity.types || []).slice(0, 1))
-    );
-    return ['All', ...Array.from(categories)];
-  }, [result?.activities]);
-
-  const visibleActivities = useMemo(
-    () =>
-      (result?.activities || []).filter(
-        (activity) => activityCategory === 'All' || (activity.types || []).includes(activityCategory)
-      ),
-    [activityCategory, result?.activities]
-  );
+  const activeActivityCategory = activityTaxonomy.find((category) => category.id === selectedActivityCategory);
+  const visibleActivities = useMemo(() => result?.activities || [], [result?.activities]);
 
   const activitiesPerPage = 9;
   const activityPageCount = Math.max(1, Math.ceil(visibleActivities.length / activitiesPerPage));
@@ -478,7 +492,7 @@ export default function TripPlannerPage() {
 
   useEffect(() => {
     setActivityPage(1);
-  }, [activityCategory, result?.activities]);
+  }, [selectedActivityCategory, selectedActivitySubcategories, result?.activities]);
 
   const plannerSteps = useMemo(
     () => [
@@ -598,7 +612,8 @@ export default function TripPlannerPage() {
         stayPreferences: plan.stayPreferences,
       }));
       setSelectedDay(plan.itinerary?.days?.[0]?.day || 1);
-      setActivityCategory('All');
+      setSelectedActivityCategory(plan.intent?.activityCategory || 'all');
+      setSelectedActivitySubcategories(Array.isArray(plan.intent?.activitySubcategories) ? plan.intent.activitySubcategories : []);
       setActivityPage(1);
       toast.success('Trip restored');
     } catch (error: any) {
@@ -727,24 +742,28 @@ export default function TripPlannerPage() {
 
   const refreshActivitySearch = async (
     radiusKm: number,
-    location?: TripIntent['activityLocation']
+    location?: TripIntent['activityLocation'],
+    category?: string,
+    subcategories?: string[]
   ) => {
     if (!planId || !result || rangeLoading) return;
-    if (!location && result.intent.activityRadiusKm === radiusKm) {
+    if (!location && category === undefined && subcategories === undefined && result.intent.activityRadiusKm === radiusKm) {
       setPendingRadius(null);
       return;
     }
     setRangeLoading(true);
     setPendingRadius(radiusKm);
     try {
-      const response = await api.patch(updateTripActivityRadius(planId), { radiusKm, location });
+      const response = await api.patch(updateTripActivityRadius(planId), { radiusKm, location, category, subcategories });
       const data = response.data?.data;
       setResult((current) => current ? {
         ...current,
         intent: { ...current.intent, ...(data?.intent || {}), activityRadiusKm: radiusKm },
         activities: data?.activities || [],
       } : current);
-      setActivityCategory('All');
+      if (category !== undefined) setSelectedActivityCategory(category);
+      if (subcategories !== undefined) setSelectedActivitySubcategories(subcategories);
+      setActivityPage(1);
       toast.success(`Showing activities within ${radiusKm} km`);
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Unable to change the activity range');
@@ -756,6 +775,19 @@ export default function TripPlannerPage() {
 
   const changeActivityRadius = async (radiusKm: number) => {
     await refreshActivitySearch(radiusKm);
+  };
+
+  const chooseActivityCategory = async (category: string) => {
+    if (!result || rangeLoading) return;
+    await refreshActivitySearch(result.intent.activityRadiusKm || 5, undefined, category, []);
+  };
+
+  const toggleActivitySubcategory = async (subcategory: string) => {
+    if (!result || rangeLoading || selectedActivityCategory === 'all') return;
+    const next = selectedActivitySubcategories.includes(subcategory)
+      ? selectedActivitySubcategories.filter((item) => item !== subcategory)
+      : [...selectedActivitySubcategories, subcategory];
+    await refreshActivitySearch(result.intent.activityRadiusKm || 5, undefined, selectedActivityCategory, next);
   };
 
   const searchActivityLocation = async () => {
@@ -1502,7 +1534,7 @@ export default function TripPlannerPage() {
 
         {result && planId && (
           <section id="activity-recommendations" className="mt-6 scroll-mt-24 rounded-3xl border border-[#e8e9ec] bg-white p-5 sm:p-7 dark:border-[#353c47] dark:bg-[#1c222c]">
-            <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+            <div>
               <div>
                 <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[#8b6700] dark:text-[#ffbf00]">Verified nearby recommendations</p>
                 <h2 className="mt-1 font-display text-2xl font-black text-[#17191b] dark:text-white">{staySkipped && !result.intent.activityLocation ? (placeSearchMode === 'place' ? 'Add places you already know' : 'Where would you like to explore?') : 'Choose what belongs in your trip'}</h2>
@@ -1510,18 +1542,29 @@ export default function TripPlannerPage() {
                 <span className="mt-3 inline-flex rounded-full bg-[#eef7f0] px-2.5 py-1 text-[10px] font-extrabold text-[#347047] dark:bg-[#173322] dark:text-[#87d69d]">Booking a stay is optional</span>
                 <p className="mt-2 text-[10px] font-medium text-[#969ba2]">Place details provided by <span translate="no" className="whitespace-nowrap font-bold text-[#666b72] dark:text-[#c4cad2]">Google Maps</span></p>
               </div>
-              <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none]">
-                {activityCategories.map((category) => (
-                  <button
-                    key={category}
-                    type="button"
-                    onClick={() => setActivityCategory(category)}
-                    className={`shrink-0 rounded-full border px-3.5 py-2 text-xs font-extrabold capitalize transition ${activityCategory === category ? 'border-[#ffbf00] bg-[#ffbf00] text-[#17191b]' : 'border-[#e3e5e8] text-[#646a72] dark:border-[#3a424e] dark:text-[#c0c6cf]'}`}
-                  >
-                    {category.replaceAll('_', ' ')}
+            </div>
+
+            <div className="mt-5 rounded-2xl border border-[#e7e9ec] bg-[#fafafa] p-3 sm:p-4 dark:border-[#343b46] dark:bg-[#151a22]">
+              <div className="flex gap-2 overflow-x-auto pb-2 [scrollbar-width:none]">
+                <button type="button" disabled={rangeLoading} onClick={() => void chooseActivityCategory('all')} className={`flex min-w-[92px] shrink-0 flex-col items-center justify-center rounded-2xl border px-3 py-3 text-xs font-extrabold transition disabled:opacity-60 ${selectedActivityCategory === 'all' ? 'border-[#ffbf00] bg-[#ffbf00] text-[#17191b] shadow-[0_8px_24px_rgba(255,191,0,0.22)]' : 'border-[#e1e4e8] bg-white text-[#626970] dark:border-[#3a424e] dark:bg-[#1c222c] dark:text-[#c6ccd5]'}`}><span className="mb-1 text-xl">✨</span>All</button>
+                {activityTaxonomy.map((category) => (
+                  <button key={category.id} type="button" disabled={rangeLoading} onClick={() => void chooseActivityCategory(category.id)} className={`flex min-w-[116px] shrink-0 flex-col items-center justify-center rounded-2xl border px-3 py-3 text-center text-xs font-extrabold transition disabled:opacity-60 ${selectedActivityCategory === category.id ? 'border-[#ffbf00] bg-[#ffbf00] text-[#17191b] shadow-[0_8px_24px_rgba(255,191,0,0.22)]' : 'border-[#e1e4e8] bg-white text-[#626970] hover:border-[#d3aa2c] dark:border-[#3a424e] dark:bg-[#1c222c] dark:text-[#c6ccd5]'}`}>
+                    <span className="mb-1 text-xl">{category.emoji}</span>{category.label}
                   </button>
                 ))}
               </div>
+              {activeActivityCategory && (
+                <div className="mt-3 border-t border-[#e3e5e8] pt-3 dark:border-[#343b46]">
+                  <div className="mb-2 flex items-center justify-between gap-3"><p className="text-xs font-black text-[#25292d] dark:text-white">Refine {activeActivityCategory.label}</p><span className="text-[10px] font-semibold text-[#8a9098]">Select one or more</span></div>
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" disabled={rangeLoading} onClick={() => void refreshActivitySearch(result.intent.activityRadiusKm || 5, undefined, selectedActivityCategory, [])} className={`rounded-full border px-3 py-2 text-[11px] font-extrabold transition disabled:opacity-60 ${selectedActivitySubcategories.length === 0 ? 'border-[#ffbf00] bg-[#fff2bd] text-[#654b00] dark:bg-[#332b14] dark:text-[#ffd85d]' : 'border-[#dfe2e6] bg-white text-[#697078] dark:border-[#3a424e] dark:bg-[#1c222c] dark:text-[#c6ccd5]'}`}>All {activeActivityCategory.label}</button>
+                    {activeActivityCategory.subcategories.map((subcategory) => {
+                      const selected = selectedActivitySubcategories.includes(subcategory.id);
+                      return <button key={subcategory.id} type="button" disabled={rangeLoading} onClick={() => void toggleActivitySubcategory(subcategory.id)} className={`rounded-full border px-3 py-2 text-[11px] font-extrabold transition disabled:opacity-60 ${selected ? 'border-[#ffbf00] bg-[#ffbf00] text-[#17191b]' : 'border-[#dfe2e6] bg-white text-[#697078] hover:border-[#d3aa2c] dark:border-[#3a424e] dark:bg-[#1c222c] dark:text-[#c6ccd5]'}`}>{selected && <Check size={11} className="mr-1 inline" />}{subcategory.label}</button>;
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="mt-5 rounded-2xl border border-[#eceef1] bg-[#fafafa] p-4 dark:border-[#353c47] dark:bg-[#151a22]">
