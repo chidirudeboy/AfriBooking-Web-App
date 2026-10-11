@@ -36,6 +36,7 @@ import {
   Users,
   Wallet,
   Waves,
+  X,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import AppShell from '@/components/AppShell';
@@ -47,6 +48,9 @@ import {
   getTripPlan,
   getTripPlans,
   tripPlannerMessage,
+  resetTripStayPreferences,
+  setTripStayPreference,
+  undoTripStayPreference,
   updateTripPlan,
 } from '@/lib/endpoints';
 
@@ -138,6 +142,21 @@ type PlannerResult = {
     estimatedActivityCost?: number;
     days: ItineraryDay[];
   };
+  stayPreferences?: StayPreferences;
+};
+
+type StayDecision = 'interested' | 'rejected';
+
+type StayPreferences = {
+  interestedApartmentIds: string[];
+  rejectedApartmentIds: string[];
+  currentApartmentId?: string;
+  decisions: Array<{
+    apartmentId: string;
+    decision: StayDecision;
+    reasons: string[];
+    decidedAt: string;
+  }>;
 };
 
 type SavedPlan = {
@@ -149,8 +168,11 @@ type SavedPlan = {
   apartments?: ApartmentCandidate[];
   activities?: ActivityCandidate[];
   itinerary?: PlannerResult['itinerary'];
+  stayPreferences?: StayPreferences;
   updatedAt: string;
 };
+
+const rejectionReasons = ['Too expensive', 'Wrong area', 'Not enough space', 'Not my style'];
 
 const starterPrompts = [
   'Plan a relaxing weekend in Ikeja for two',
@@ -235,6 +257,10 @@ export default function TripPlannerPage() {
   const [savingPlan, setSavingPlan] = useState(false);
   const [activityCategory, setActivityCategory] = useState('All');
   const [failedActivityImages, setFailedActivityImages] = useState<Set<string>>(new Set());
+  const [stayDecisionLoading, setStayDecisionLoading] = useState(false);
+  const [stayCardMotion, setStayCardMotion] = useState<'left' | 'right' | null>(null);
+  const [lastRejectedApartmentId, setLastRejectedApartmentId] = useState<string | null>(null);
+  const [showInterestedStays, setShowInterestedStays] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -270,12 +296,32 @@ export default function TripPlannerPage() {
 
   const selectedApartment = useMemo(() => {
     if (!result?.apartments.length) return undefined;
+    const decidedIds = new Set([
+      ...(result.stayPreferences?.interestedApartmentIds || []),
+      ...(result.stayPreferences?.rejectedApartmentIds || []),
+    ]);
     return (
       result.apartments.find(
-        (apartment) => apartment.id === result.itinerary?.selectedApartmentId
-      ) || result.apartments[0]
+        (apartment) => apartment.id === result.stayPreferences?.currentApartmentId
+      ) ||
+      result.apartments.find(
+        (apartment) => apartment.id === result.itinerary?.selectedApartmentId && !decidedIds.has(apartment.id)
+      ) || result.apartments.find((apartment) => !decidedIds.has(apartment.id))
     );
   }, [result]);
+
+  const interestedApartments = useMemo(() => {
+    const interestedIds = new Set(result?.stayPreferences?.interestedApartmentIds || []);
+    return (result?.apartments || []).filter((apartment) => interestedIds.has(apartment.id));
+  }, [result]);
+
+  const reviewedStayCount = useMemo(
+    () => new Set([
+      ...(result?.stayPreferences?.interestedApartmentIds || []),
+      ...(result?.stayPreferences?.rejectedApartmentIds || []),
+    ]).size,
+    [result]
+  );
 
   const selectedItineraryDay =
     result?.itinerary?.days.find((day) => day.day === selectedDay) || result?.itinerary?.days[0];
@@ -384,6 +430,8 @@ export default function TripPlannerPage() {
     setFailedTurn(null);
     setSelectedDay(1);
     setPlanId(null);
+    setLastRejectedApartmentId(null);
+    setShowInterestedStays(false);
     inputRef.current?.focus();
   };
 
@@ -404,6 +452,7 @@ export default function TripPlannerPage() {
         apartments: plan.apartments || [],
         activities: plan.activities || [],
         itinerary: plan.itinerary,
+        stayPreferences: plan.stayPreferences,
       });
       setSelectedDay(plan.itinerary?.days?.[0]?.day || 1);
       setActivityCategory('All');
@@ -412,6 +461,91 @@ export default function TripPlannerPage() {
       toast.error(error.response?.data?.message || 'Unable to restore this trip');
     } finally {
       setPlansLoading(false);
+    }
+  };
+
+  const applyStayPreferenceResponse = (data: {
+    stayPreferences: StayPreferences;
+    itinerary?: PlannerResult['itinerary'];
+  }) => {
+    setResult((current) => current
+      ? { ...current, stayPreferences: data.stayPreferences, itinerary: data.itinerary }
+      : current
+    );
+    setSavedPlans((current) => current.map((plan) =>
+      plan._id === planId
+        ? { ...plan, stayPreferences: data.stayPreferences, itinerary: data.itinerary, updatedAt: new Date().toISOString() }
+        : plan
+    ));
+  };
+
+  const decideStay = async (
+    apartmentId: string,
+    decision: StayDecision,
+    reasons: string[] = []
+  ) => {
+    if (!planId || stayDecisionLoading) return;
+    setStayDecisionLoading(true);
+    setStayCardMotion(decision === 'interested' ? 'right' : 'left');
+    try {
+      const response = await api.post(setTripStayPreference(planId), {
+        apartmentId,
+        decision,
+        reasons,
+      });
+      applyStayPreferenceResponse(response.data.data);
+      if (decision === 'interested') {
+        setLastRejectedApartmentId(null);
+        toast.success('Added to your interested stays');
+      } else {
+        setLastRejectedApartmentId(apartmentId);
+      }
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Unable to save your choice');
+    } finally {
+      setStayCardMotion(null);
+      setStayDecisionLoading(false);
+    }
+  };
+
+  const addRejectionReason = async (reason: string) => {
+    if (!lastRejectedApartmentId || !result) return;
+    const existingReasons = result.stayPreferences?.decisions.find(
+      (item) => item.apartmentId === lastRejectedApartmentId
+    )?.reasons || [];
+    await decideStay(lastRejectedApartmentId, 'rejected', [...existingReasons, reason]);
+    setLastRejectedApartmentId(null);
+    toast.success('Preference noted');
+  };
+
+  const undoStayDecision = async () => {
+    if (!planId || stayDecisionLoading) return;
+    setStayDecisionLoading(true);
+    try {
+      const response = await api.delete(undoTripStayPreference(planId));
+      applyStayPreferenceResponse(response.data.data);
+      setLastRejectedApartmentId(null);
+      toast.success('Last choice undone');
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Unable to undo your last choice');
+    } finally {
+      setStayDecisionLoading(false);
+    }
+  };
+
+  const resetStayChoices = async () => {
+    if (!planId || stayDecisionLoading) return;
+    setStayDecisionLoading(true);
+    try {
+      const response = await api.delete(resetTripStayPreferences(planId));
+      applyStayPreferenceResponse(response.data.data);
+      setLastRejectedApartmentId(null);
+      setShowInterestedStays(false);
+      toast.success('Stay choices reset');
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Unable to reset your choices');
+    } finally {
+      setStayDecisionLoading(false);
     }
   };
 
@@ -891,9 +1025,16 @@ export default function TripPlannerPage() {
                 </div>
 
                 {selectedApartment ? (
-                  <div className="mt-4 overflow-hidden rounded-2xl border border-[#e8e9ec] dark:border-[#353c47]">
+                  <div
+                    key={selectedApartment.id}
+                    className={`mt-4 overflow-hidden rounded-2xl border border-[#e8e9ec] bg-white shadow-[0_14px_40px_rgba(28,31,35,0.08)] transition duration-300 ease-out dark:border-[#353c47] dark:bg-[#181d25] ${stayCardMotion === 'left' ? '-translate-x-8 -rotate-2 opacity-20' : stayCardMotion === 'right' ? 'translate-x-8 rotate-2 opacity-20' : 'translate-x-0 rotate-0 opacity-100'}`}
+                  >
+                    <div className="flex items-center justify-between bg-[#fafafa] px-4 py-2.5 text-[10px] font-extrabold text-[#7b8189] dark:bg-[#141922] dark:text-[#aeb5bf]">
+                      <span>{reviewedStayCount + 1} of {result.apartments.length}</span>
+                      <span>{result.apartments.length - reviewedStayCount} left to review</span>
+                    </div>
                     {selectedApartment.image ? (
-                      <div className="relative h-36 w-full bg-[#eef0f2]">
+                      <div className="relative h-44 w-full bg-[#eef0f2]">
                         <Image
                           src={selectedApartment.image}
                           alt={selectedApartment.name}
@@ -902,6 +1043,10 @@ export default function TripPlannerPage() {
                           sizes="(max-width: 1280px) 100vw, 420px"
                           className="object-cover"
                         />
+                        <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/55 to-transparent" />
+                        <span className="absolute bottom-3 left-3 rounded-full bg-white/95 px-3 py-1.5 text-[10px] font-black text-[#17191b] shadow-sm backdrop-blur">
+                          Recommended for your trip
+                        </span>
                       </div>
                     ) : (
                       <div className="grid h-28 place-items-center bg-[#f2f3f5] text-[#a2a7ae] dark:bg-[#141922]">
@@ -926,6 +1071,32 @@ export default function TripPlannerPage() {
                         <span>•</span>
                         <span>Up to {selectedApartment.guests} guests</span>
                       </div>
+                      <div className="mt-5 flex items-center justify-center gap-5 border-t border-[#eceef1] pt-4 dark:border-[#353c47]">
+                        <button
+                          type="button"
+                          onClick={() => void decideStay(selectedApartment.id, 'rejected')}
+                          disabled={stayDecisionLoading}
+                          aria-label={`Not interested in ${selectedApartment.name}`}
+                          className="group flex flex-col items-center gap-1.5 text-[10px] font-extrabold text-[#8b9097] disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <span className="grid h-14 w-14 place-items-center rounded-full border-2 border-[#e3e5e8] bg-white text-[#e85d62] shadow-[0_8px_24px_rgba(28,31,35,0.10)] transition group-hover:-translate-y-1 group-hover:border-[#f0b2b5] group-hover:bg-[#fff5f5] dark:border-[#3a424e] dark:bg-[#202630]">
+                            <X size={25} strokeWidth={2.6} />
+                          </span>
+                          Not for me
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void decideStay(selectedApartment.id, 'interested')}
+                          disabled={stayDecisionLoading}
+                          aria-label={`Interested in ${selectedApartment.name}`}
+                          className="group flex flex-col items-center gap-1.5 text-[10px] font-extrabold text-[#8b9097] disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <span className="grid h-16 w-16 place-items-center rounded-full bg-[#ffbf00] text-[#17191b] shadow-[0_10px_28px_rgba(255,191,0,0.32)] transition group-hover:-translate-y-1 group-hover:bg-[#eeb200]">
+                            {stayDecisionLoading ? <Loader2 size={24} className="animate-spin" /> : <Check size={27} strokeWidth={2.8} />}
+                          </span>
+                          I’m interested
+                        </button>
+                      </div>
                       <Link
                         href={`/apartments/${selectedApartment.id}`}
                         className="mt-4 flex items-center justify-center gap-1.5 rounded-xl bg-[#17191b] px-4 py-2.5 text-xs font-extrabold text-white transition hover:bg-[#303438] dark:bg-[#ffbf00] dark:text-[#17191b]"
@@ -934,10 +1105,69 @@ export default function TripPlannerPage() {
                       </Link>
                     </div>
                   </div>
+                ) : result.apartments.length > 0 ? (
+                  <div className="mt-4 rounded-2xl border border-[#e6dfca] bg-[linear-gradient(145deg,#fffdf6,#fff5d7)] p-5 text-center dark:border-[#403821] dark:bg-[linear-gradient(145deg,#202630,#2c2617)]">
+                    <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-[#ffbf00] text-[#17191b]"><BookmarkCheck size={22} /></div>
+                    <h3 className="mt-3 text-base font-black text-[#17191b] dark:text-white">You’ve reviewed every stay</h3>
+                    <p className="mt-2 text-xs leading-5 text-[#737981] dark:text-[#b8bec7]">
+                      {interestedApartments.length
+                        ? `${interestedApartments.length} stay${interestedApartments.length === 1 ? ' is' : 's are'} waiting in your shortlist.`
+                        : 'None felt right yet. Reset your choices or ask the AI to adjust the search.'}
+                    </p>
+                    <button type="button" onClick={() => void resetStayChoices()} disabled={stayDecisionLoading} className="mt-4 inline-flex items-center gap-1.5 rounded-xl border border-[#e5d397] bg-white px-4 py-2.5 text-xs font-extrabold text-[#67500b] transition hover:border-[#d2ad34] disabled:opacity-50 dark:border-[#4c432b] dark:bg-[#181d25] dark:text-[#f0d47f]">
+                      <RotateCcw size={13} /> Review again
+                    </button>
+                  </div>
                 ) : (
                   <p className="mt-4 rounded-2xl bg-[#fff7dc] p-4 text-sm leading-6 text-[#6f570d] dark:bg-[#302916] dark:text-[#efcf77]">
                     Try a nearby neighbourhood or another destination where AfriBooking currently has published stays.
                   </p>
+                )}
+
+                {lastRejectedApartmentId && (
+                  <div className="mt-3 rounded-2xl border border-[#ece5d1] bg-[#fffdf7] p-3 dark:border-[#403a2c] dark:bg-[#211f19]">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-[11px] font-extrabold text-[#52575e] dark:text-[#d6dbe2]">Help improve the next picks <span className="font-medium text-[#92979e]">(optional)</span></p>
+                      <button type="button" onClick={() => setLastRejectedApartmentId(null)} className="text-[10px] font-bold text-[#8d9299]">Skip</button>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {rejectionReasons.map((reason) => (
+                        <button key={reason} type="button" onClick={() => void addRejectionReason(reason)} disabled={stayDecisionLoading} className="rounded-full border border-[#e1d6b5] bg-white px-2.5 py-1.5 text-[10px] font-bold text-[#6e5b20] transition hover:border-[#d4a914] hover:bg-[#fff7db] disabled:opacity-50 dark:border-[#4b432e] dark:bg-[#181d25] dark:text-[#e4cd86]">
+                          {reason}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {(reviewedStayCount > 0 || interestedApartments.length > 0) && (
+                  <div className="mt-4 flex flex-wrap items-center gap-2">
+                    <button type="button" onClick={() => setShowInterestedStays((current) => !current)} className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#fff6d8] px-3 py-2.5 text-[11px] font-extrabold text-[#755900] transition hover:bg-[#ffefb9] dark:bg-[#302916] dark:text-[#f2d372]">
+                      <BookmarkCheck size={14} /> Interested stays ({interestedApartments.length})
+                    </button>
+                    {result.stayPreferences?.decisions.length ? (
+                      <button type="button" onClick={() => void undoStayDecision()} disabled={stayDecisionLoading} aria-label="Undo last stay choice" className="grid h-9 w-9 place-items-center rounded-xl border border-[#e3e5e8] text-[#6f757d] transition hover:bg-[#f5f6f7] disabled:opacity-40 dark:border-[#3a424e] dark:text-[#c0c6cf] dark:hover:bg-[#252c36]">
+                        <RotateCcw size={14} />
+                      </button>
+                    ) : null}
+                  </div>
+                )}
+
+                {showInterestedStays && (
+                  <div className="mt-3 space-y-2 rounded-2xl border border-[#eceef1] bg-[#fafafa] p-3 dark:border-[#353c47] dark:bg-[#141922]">
+                    {interestedApartments.length ? interestedApartments.map((apartment) => (
+                      <Link key={apartment.id} href={`/apartments/${apartment.id}`} className="flex items-center gap-3 rounded-xl bg-white p-2.5 transition hover:shadow-sm dark:bg-[#1c222c]">
+                        <div className="relative h-12 w-14 shrink-0 overflow-hidden rounded-lg bg-[#eceef1] dark:bg-[#252c36]">
+                          {apartment.image ? <Image src={apartment.image} alt="" fill unoptimized sizes="56px" className="object-cover" /> : <div className="grid h-full place-items-center text-[#a2a7ae]"><BedDouble size={16} /></div>}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-xs font-extrabold text-[#25292d] dark:text-white">{apartment.name}</p>
+                          <p className="mt-0.5 text-[10px] font-semibold text-[#81868d]">{formatNaira(apartment.pricePerNight)} / night</p>
+                        </div>
+                        <ArrowRight size={13} className="text-[#9a9fa6]" />
+                      </Link>
+                    )) : <p className="py-3 text-center text-xs text-[#8a9098]">Tap the check mark on a stay you like and it will appear here.</p>}
+                  </div>
                 )}
               </section>
             )}
