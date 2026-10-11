@@ -11,6 +11,7 @@ import {
   BedDouble,
   Bot,
   CalendarDays,
+  Car,
   Camera,
   Check,
   ChevronDown,
@@ -52,6 +53,7 @@ import {
   selectTripStay,
   setTripStayPreference,
   undoTripStayPreference,
+  updateTripActivityRadius,
   updateTripPlan,
 } from '@/lib/endpoints';
 
@@ -70,6 +72,7 @@ type TripIntent = {
   interests: string[];
   pace?: 'relaxed' | 'balanced' | 'packed';
   transport?: string;
+  activityRadiusKm?: number;
   notes?: string;
   missingFields: string[];
 };
@@ -114,6 +117,11 @@ type ActivityCandidate = {
   googleMapsUri?: string;
   priceLevel?: string;
   openNow?: boolean;
+  distanceKm?: number;
+  drivingDistanceKm?: number;
+  travelTimeMinutes?: number;
+  trafficAware?: boolean;
+  recommendationScore?: number;
   hasPhoto?: boolean;
   photoAttributions?: Array<{
     displayName: string;
@@ -258,6 +266,8 @@ export default function TripPlannerPage() {
   const [savedPlans, setSavedPlans] = useState<SavedPlan[]>([]);
   const [plansLoading, setPlansLoading] = useState(true);
   const [savingPlan, setSavingPlan] = useState(false);
+  const [rangeLoading, setRangeLoading] = useState(false);
+  const [pendingRadius, setPendingRadius] = useState<number | null>(null);
   const [activityCategory, setActivityCategory] = useState('All');
   const [failedActivityImages, setFailedActivityImages] = useState<Set<string>>(new Set());
   const [stayDecisionLoading, setStayDecisionLoading] = useState(false);
@@ -595,6 +605,28 @@ export default function TripPlannerPage() {
       toast.error(error.response?.data?.message || 'Unable to choose this stay');
     } finally {
       setStayDecisionLoading(false);
+    }
+  };
+
+  const changeActivityRadius = async (radiusKm: number) => {
+    if (!planId || !result || rangeLoading || result.intent.activityRadiusKm === radiusKm) return;
+    setRangeLoading(true);
+    setPendingRadius(radiusKm);
+    try {
+      const response = await api.patch(updateTripActivityRadius(planId), { radiusKm });
+      const data = response.data?.data;
+      setResult((current) => current ? {
+        ...current,
+        intent: { ...current.intent, ...(data?.intent || {}), activityRadiusKm: radiusKm },
+        activities: data?.activities || [],
+      } : current);
+      setActivityCategory('All');
+      toast.success(`Showing activities within ${radiusKm} km`);
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Unable to change the activity range');
+    } finally {
+      setRangeLoading(false);
+      setPendingRadius(null);
     }
   };
 
@@ -1247,7 +1279,7 @@ export default function TripPlannerPage() {
           </aside>
         </div>
 
-        {result?.activities && result.activities.length > 0 && (
+        {result?.activities && (result.activities.length > 0 || chosenApartment) && (
           <section id="activity-recommendations" className="mt-6 scroll-mt-24 rounded-3xl border border-[#e8e9ec] bg-white p-5 sm:p-7 dark:border-[#353c47] dark:bg-[#1c222c]">
             <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
               <div>
@@ -1270,7 +1302,30 @@ export default function TripPlannerPage() {
               </div>
             </div>
 
-            <div className="mt-6 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-[#eceef1] bg-[#fafafa] p-4 sm:flex-row sm:items-center sm:justify-between dark:border-[#353c47] dark:bg-[#151a22]">
+              <div>
+                <p className="text-xs font-black text-[#25292d] dark:text-white">How far should we look?</p>
+                <p className="mt-1 text-[11px] text-[#7b8189] dark:text-[#aeb5bf]">Measured from your primary stay. A wider range can increase driving time.</p>
+              </div>
+              <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none]">
+                {[2, 5, 10, 15, 25].map((radiusKm) => {
+                  const selected = (result.intent.activityRadiusKm || 5) === radiusKm;
+                  return (
+                    <button
+                      key={radiusKm}
+                      type="button"
+                      disabled={rangeLoading}
+                      onClick={() => void changeActivityRadius(radiusKm)}
+                      className={`shrink-0 rounded-full border px-3.5 py-2 text-xs font-extrabold transition disabled:cursor-wait disabled:opacity-60 ${selected ? 'border-[#ffbf00] bg-[#ffbf00] text-[#17191b]' : 'border-[#dfe2e6] bg-white text-[#626970] hover:border-[#d2a000] dark:border-[#3a424e] dark:bg-[#1c222c] dark:text-[#c0c6cf]'}`}
+                    >
+                      {pendingRadius === radiusKm ? <Loader2 size={13} className="inline animate-spin" /> : `${radiusKm} km`}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {visibleActivities.length > 0 ? <div className="mt-6 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
               {visibleActivities.map((activity) => {
                 const isAdded = Boolean(
                   result.itinerary?.days.some((day) =>
@@ -1283,6 +1338,8 @@ export default function TripPlannerPage() {
                 const websiteUrl = safeExternalUrl(activity.websiteUri);
                 const showPhoto = activity.hasPhoto && !failedActivityImages.has(activity.id);
                 const priceLabel = formatPlacePrice(activity.priceLevel);
+                const displayedDistance = activity.drivingDistanceKm ?? activity.distanceKm;
+                const isDrivingDistance = activity.drivingDistanceKm !== undefined;
                 return (
                   <article key={activity.id} className="group flex min-h-[310px] flex-col overflow-hidden rounded-[22px] border border-[#e2e4e7] bg-white shadow-[0_12px_35px_rgba(31,35,41,0.06)] transition hover:-translate-y-1 hover:shadow-[0_18px_45px_rgba(31,35,41,0.12)] dark:border-[#353c47] dark:bg-[#181d25]">
                     {showPhoto ? (
@@ -1331,6 +1388,20 @@ export default function TripPlannerPage() {
                         </div>
                       )}
                       <p className="mt-2 flex items-start gap-1.5 text-xs leading-5 text-[#7a8088] dark:text-[#aeb5bf]"><MapPin size={13} className="mt-0.5 shrink-0" /> <span className="line-clamp-2">{activity.address || result.intent.destination}</span></p>
+                      {(displayedDistance !== undefined || activity.travelTimeMinutes !== undefined) && (
+                        <div className="mt-3 flex flex-wrap gap-2 text-[10px] font-extrabold">
+                          {displayedDistance !== undefined && (
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-[#f2f4f6] px-2.5 py-1.5 text-[#59616a] dark:bg-[#252c36] dark:text-[#c6ccd5]">
+                              <MapPin size={11} /> {displayedDistance < 1 ? `${Math.max(1, Math.round(displayedDistance * 1000))} m` : `${displayedDistance.toFixed(1)} km`} {isDrivingDistance ? 'by road' : 'direct'} from stay
+                            </span>
+                          )}
+                          {activity.travelTimeMinutes !== undefined && (
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-[#fff3c1] px-2.5 py-1.5 text-[#765800] dark:bg-[#302916] dark:text-[#ffcf3f]">
+                              <Car size={11} /> About {activity.travelTimeMinutes} min drive{activity.trafficAware ? ' in current traffic' : ''}
+                            </span>
+                          )}
+                        </div>
+                      )}
                       {(activity.phoneNumber || websiteUrl) && (
                         <div className="mt-3 flex flex-wrap gap-2">
                           {activity.phoneNumber && <a href={`tel:${activity.phoneNumber}`} className="inline-flex items-center gap-1 rounded-lg bg-[#f5f6f7] px-2.5 py-1.5 text-[10px] font-bold text-[#5f656d] dark:bg-[#252c36] dark:text-[#c6ccd5]"><Phone size={11} /> Call</a>}
@@ -1359,7 +1430,12 @@ export default function TripPlannerPage() {
                   </article>
                 );
               })}
-            </div>
+            </div> : (
+              <div className="mt-6 rounded-2xl border border-dashed border-[#dfe2e6] px-5 py-10 text-center dark:border-[#3a424e]">
+                <p className="font-bold text-[#3d4248] dark:text-white">No matching activities in this range</p>
+                <p className="mt-1 text-sm text-[#858b93]">Try a wider distance or add more interests to your trip.</p>
+              </div>
+            )}
           </section>
         )}
 
