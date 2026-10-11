@@ -388,8 +388,11 @@ export default function TripPlannerPage() {
   const [lastRejectedApartmentId, setLastRejectedApartmentId] = useState<string | null>(null);
   const [showInterestedStays, setShowInterestedStays] = useState(false);
   const [showStayComparison, setShowStayComparison] = useState(false);
+  const [planPendingDeletion, setPlanPendingDeletion] = useState<SavedPlan | null>(null);
+  const [deletingPlan, setDeletingPlan] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const activityLocationInputRef = useRef<HTMLInputElement>(null);
+  const deleteCancelButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (authLoading || user) return;
@@ -425,6 +428,21 @@ export default function TripPlannerPage() {
       window.removeEventListener('keydown', closeOnEscape);
     };
   }, [showStayComparison]);
+
+  useEffect(() => {
+    if (!planPendingDeletion) return;
+    const previousOverflow = document.body.style.overflow;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !deletingPlan) setPlanPendingDeletion(null);
+    };
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', closeOnEscape);
+    window.requestAnimationFrame(() => deleteCancelButtonRef.current?.focus());
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [deletingPlan, planPendingDeletion]);
 
   const suggestions = useMemo(() => {
     if (!result) return starterPrompts;
@@ -1017,15 +1035,20 @@ export default function TripPlannerPage() {
     }
   };
 
-  const removePlan = async (selectedPlanId: string) => {
-    if (!window.confirm('Delete this trip permanently?')) return;
+  const removePlan = async () => {
+    if (!planPendingDeletion || deletingPlan) return;
+    const selectedPlanId = planPendingDeletion._id;
+    setDeletingPlan(true);
     try {
       await api.delete(deleteTripPlan(selectedPlanId));
       setSavedPlans((current) => current.filter((plan) => plan._id !== selectedPlanId));
       if (planId === selectedPlanId) resetPlanner();
+      setPlanPendingDeletion(null);
       toast.success('Trip deleted');
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Unable to delete this trip');
+    } finally {
+      setDeletingPlan(false);
     }
   };
 
@@ -1135,7 +1158,7 @@ export default function TripPlannerPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => void removePlan(plan._id)}
+                    onClick={() => setPlanPendingDeletion(plan)}
                     aria-label={`Delete ${plan.title}`}
                     className="grid h-8 w-8 place-items-center rounded-lg text-[#9b7777] transition hover:bg-[#fff0f0] hover:text-[#a72c2c] dark:hover:bg-[#382124]"
                   >
@@ -1957,6 +1980,65 @@ export default function TripPlannerPage() {
           </div>
         )}
       </main>
+
+      {planPendingDeletion && (
+        <div
+          className="fixed inset-0 z-[100] grid place-items-center bg-[#090d13]/75 p-4 backdrop-blur-sm"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !deletingPlan) setPlanPendingDeletion(null);
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-trip-title"
+            aria-describedby="delete-trip-description"
+            className="relative w-full max-w-md overflow-hidden rounded-[28px] border border-white/10 bg-white p-6 shadow-[0_30px_90px_rgba(0,0,0,0.45)] dark:border-[#343c48] dark:bg-[#1b222c] sm:p-7"
+          >
+            <button
+              type="button"
+              onClick={() => setPlanPendingDeletion(null)}
+              disabled={deletingPlan}
+              aria-label="Close delete confirmation"
+              className="absolute right-4 top-4 grid h-9 w-9 place-items-center rounded-full text-[#777e87] transition hover:bg-[#f1f2f4] hover:text-[#25292d] disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-[#29313c] dark:hover:text-white"
+            >
+              <X size={18} />
+            </button>
+
+            <div className="grid h-14 w-14 place-items-center rounded-2xl bg-[#fff0f0] text-[#c53434] dark:bg-[#3b2025] dark:text-[#ff7d7d]">
+              <Trash2 size={24} />
+            </div>
+            <h2 id="delete-trip-title" className="mt-5 pr-10 text-xl font-black text-[#17191b] dark:text-white">
+              Delete this trip?
+            </h2>
+            <p id="delete-trip-description" className="mt-2 text-sm leading-6 text-[#6f757d] dark:text-[#b4bbc5]">
+              <span className="font-bold text-[#34383d] dark:text-[#eef1f5]">“{planPendingDeletion.title}”</span> and its saved choices will be permanently removed. This cannot be undone.
+            </p>
+
+            <div className="mt-7 grid gap-2.5 sm:grid-cols-2">
+              <button
+                ref={deleteCancelButtonRef}
+                type="button"
+                onClick={() => setPlanPendingDeletion(null)}
+                disabled={deletingPlan}
+                className="order-2 rounded-xl border border-[#dfe2e6] px-4 py-3 text-sm font-extrabold text-[#4f555c] transition hover:bg-[#f5f6f7] focus:outline-none focus:ring-2 focus:ring-[#ffbf00]/60 disabled:cursor-not-allowed disabled:opacity-50 dark:border-[#3b4552] dark:text-[#d8dde5] dark:hover:bg-[#252d38] sm:order-1"
+              >
+                Keep trip
+              </button>
+              <button
+                type="button"
+                onClick={() => void removePlan()}
+                disabled={deletingPlan}
+                className="order-1 flex items-center justify-center gap-2 rounded-xl bg-[#c93636] px-4 py-3 text-sm font-extrabold text-white transition hover:bg-[#aa2929] focus:outline-none focus:ring-2 focus:ring-[#e85c5c]/50 disabled:cursor-wait disabled:opacity-70 sm:order-2"
+              >
+                {deletingPlan ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                {deletingPlan ? 'Deleting…' : 'Delete trip'}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </AppShell>
   );
 }
