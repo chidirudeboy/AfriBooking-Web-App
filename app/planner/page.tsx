@@ -355,6 +355,7 @@ export default function TripPlannerPage() {
   const [placeSearchMode, setPlaceSearchMode] = useState<'area' | 'place'>('area');
   const [staySkipped, setStaySkipped] = useState(false);
   const [activityCategory, setActivityCategory] = useState('All');
+  const [activityPage, setActivityPage] = useState(1);
   const [failedActivityImages, setFailedActivityImages] = useState<Set<string>>(new Set());
   const [stayDecisionLoading, setStayDecisionLoading] = useState(false);
   const [stayCardMotion, setStayCardMotion] = useState<'left' | 'right' | null>(null);
@@ -462,6 +463,22 @@ export default function TripPlannerPage() {
       ),
     [activityCategory, result?.activities]
   );
+
+  const activitiesPerPage = 9;
+  const activityPageCount = Math.max(1, Math.ceil(visibleActivities.length / activitiesPerPage));
+  const paginatedActivities = useMemo(
+    () => visibleActivities.slice((activityPage - 1) * activitiesPerPage, activityPage * activitiesPerPage),
+    [activityPage, visibleActivities]
+  );
+  const activityPageNumbers = useMemo(() => {
+    if (activityPageCount <= 7) return Array.from({ length: activityPageCount }, (_, index) => index + 1);
+    const pages = new Set([1, activityPageCount, activityPage - 1, activityPage, activityPage + 1]);
+    return Array.from(pages).filter((page) => page >= 1 && page <= activityPageCount).sort((a, b) => a - b);
+  }, [activityPage, activityPageCount]);
+
+  useEffect(() => {
+    setActivityPage(1);
+  }, [activityCategory, result?.activities]);
 
   const plannerSteps = useMemo(
     () => [
@@ -582,6 +599,7 @@ export default function TripPlannerPage() {
       }));
       setSelectedDay(plan.itinerary?.days?.[0]?.day || 1);
       setActivityCategory('All');
+      setActivityPage(1);
       toast.success('Trip restored');
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Unable to restore this trip');
@@ -1582,8 +1600,9 @@ export default function TripPlannerPage() {
               </div>}
             </div>
 
-            {(!staySkipped || Boolean(result.intent.activityLocation)) && (visibleActivities.length > 0 ? <div className="mt-6 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-              {visibleActivities.map((activity) => {
+            {(!staySkipped || Boolean(result.intent.activityLocation)) && (visibleActivities.length > 0 ? <>
+            <div className="mt-6 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+              {paginatedActivities.map((activity) => {
                 const isAdded = Boolean(
                   result.itinerary?.days.some((day) =>
                     day.activities.some((item) => item.sourceActivityId === activity.id)
@@ -1687,7 +1706,22 @@ export default function TripPlannerPage() {
                   </article>
                 );
               })}
-            </div> : (
+            </div>
+            {activityPageCount > 1 && (
+              <nav aria-label="Activity result pages" className="mt-7 flex flex-wrap items-center justify-center gap-2">
+                <button type="button" disabled={activityPage === 1} onClick={() => setActivityPage((page) => Math.max(1, page - 1))} className="rounded-xl border border-[#dfe2e6] px-3 py-2 text-xs font-extrabold text-[#5f656d] transition hover:border-[#d0a00c] disabled:cursor-not-allowed disabled:opacity-35 dark:border-[#3a424e] dark:text-[#c6ccd5]">Previous</button>
+                {activityPageNumbers.map((page, index) => {
+                  const previousPage = activityPageNumbers[index - 1];
+                  return <span key={page} className="contents">
+                    {previousPage && page - previousPage > 1 && <span className="px-1 text-[#8b9198]">…</span>}
+                    <button type="button" aria-current={page === activityPage ? 'page' : undefined} onClick={() => setActivityPage(page)} className={`grid h-9 min-w-9 place-items-center rounded-xl px-2 text-xs font-black transition ${page === activityPage ? 'bg-[#ffbf00] text-[#17191b] shadow-[0_6px_18px_rgba(255,191,0,0.25)]' : 'border border-[#dfe2e6] text-[#626970] hover:border-[#d0a00c] dark:border-[#3a424e] dark:text-[#c6ccd5]'}`}>{page}</button>
+                  </span>;
+                })}
+                <button type="button" disabled={activityPage === activityPageCount} onClick={() => setActivityPage((page) => Math.min(activityPageCount, page + 1))} className="rounded-xl border border-[#dfe2e6] px-3 py-2 text-xs font-extrabold text-[#5f656d] transition hover:border-[#d0a00c] disabled:cursor-not-allowed disabled:opacity-35 dark:border-[#3a424e] dark:text-[#c6ccd5]">Next</button>
+                <span className="ml-1 text-[10px] font-bold text-[#8b9198]">{visibleActivities.length} matching places</span>
+              </nav>
+            )}
+            </> : (
               <div className="mt-6 rounded-2xl border border-dashed border-[#dfe2e6] px-5 py-10 text-center dark:border-[#3a424e]">
                 <p className="font-bold text-[#3d4248] dark:text-white">No matching activities in this range</p>
                 <p className="mt-1 text-sm text-[#858b93]">Try a wider distance or add more interests to your trip.</p>
