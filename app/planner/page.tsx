@@ -81,6 +81,7 @@ type ApartmentCandidate = {
   neighborhood?: string;
   address: string;
   pricePerNight: number;
+  priceIncludesPlatformFee?: boolean;
   bedrooms: number;
   guests: number;
   amenities: string[];
@@ -1064,6 +1065,7 @@ export default function TripPlannerPage() {
                         <p className="shrink-0 text-right text-xs font-black text-[#17191b] dark:text-white">
                           {formatNaira(selectedApartment.pricePerNight)}
                           <span className="block font-medium text-[#8a9098]">per night</span>
+                          {selectedApartment.priceIncludesPlatformFee && <span className="mt-0.5 block text-[8px] font-semibold text-[#a0a5ab]">includes service fee</span>}
                         </p>
                       </div>
                       <div className="mt-3 flex items-center gap-3 text-[11px] font-semibold text-[#686e76] dark:text-[#b7bec8]">
