@@ -26,6 +26,7 @@ import {
   Phone,
   Plus,
   RotateCcw,
+  Search,
   Send,
   Share2,
   ShoppingBag,
@@ -45,6 +46,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import api from '@/lib/utils/api';
 import {
   deleteTripPlan,
+  autocompletePlaces,
+  getPlaceDetails,
   getPlacePhoto,
   getTripPlan,
   getTripPlans,
@@ -73,6 +76,13 @@ type TripIntent = {
   pace?: 'relaxed' | 'balanced' | 'packed';
   transport?: string;
   activityRadiusKm?: number;
+  activityLocation?: {
+    name: string;
+    address?: string;
+    placeId?: string;
+    latitude: number;
+    longitude: number;
+  };
   notes?: string;
   missingFields: string[];
 };
@@ -128,6 +138,12 @@ type ActivityCandidate = {
     uri?: string;
     photoUri?: string;
   }>;
+};
+
+type PlacePrediction = {
+  place_id: string;
+  description: string;
+  structured_formatting?: { main_text?: string; secondary_text?: string };
 };
 
 type ItineraryDay = {
@@ -268,6 +284,10 @@ export default function TripPlannerPage() {
   const [savingPlan, setSavingPlan] = useState(false);
   const [rangeLoading, setRangeLoading] = useState(false);
   const [pendingRadius, setPendingRadius] = useState<number | null>(null);
+  const [locationQuery, setLocationQuery] = useState('');
+  const [locationPredictions, setLocationPredictions] = useState<PlacePrediction[]>([]);
+  const [locationSearching, setLocationSearching] = useState(false);
+  const [staySkipped, setStaySkipped] = useState(false);
   const [activityCategory, setActivityCategory] = useState('All');
   const [failedActivityImages, setFailedActivityImages] = useState<Set<string>>(new Set());
   const [stayDecisionLoading, setStayDecisionLoading] = useState(false);
@@ -276,6 +296,7 @@ export default function TripPlannerPage() {
   const [showInterestedStays, setShowInterestedStays] = useState(false);
   const [showStayComparison, setShowStayComparison] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const activityLocationInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (authLoading || user) return;
@@ -468,6 +489,9 @@ export default function TripPlannerPage() {
     setLastRejectedApartmentId(null);
     setShowInterestedStays(false);
     setShowStayComparison(false);
+    setStaySkipped(false);
+    setLocationQuery('');
+    setLocationPredictions([]);
     inputRef.current?.focus();
   };
 
@@ -598,6 +622,7 @@ export default function TripPlannerPage() {
     try {
       const response = await api.post(selectTripStay(planId), { apartmentId: apartment.id });
       applyStayPreferenceResponse(response.data.data);
+      setStaySkipped(false);
       setShowStayComparison(false);
       setShowInterestedStays(true);
       toast.success(`${apartment.name} is now your primary stay`);
@@ -608,12 +633,27 @@ export default function TripPlannerPage() {
     }
   };
 
-  const changeActivityRadius = async (radiusKm: number) => {
-    if (!planId || !result || rangeLoading || result.intent.activityRadiusKm === radiusKm) return;
+  const skipStays = () => {
+    setStaySkipped(true);
+    setLocationQuery('');
+    setLocationPredictions([]);
+    document.getElementById('activity-recommendations')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    window.setTimeout(() => activityLocationInputRef.current?.focus(), 450);
+  };
+
+  const refreshActivitySearch = async (
+    radiusKm: number,
+    location?: TripIntent['activityLocation']
+  ) => {
+    if (!planId || !result || rangeLoading) return;
+    if (!location && result.intent.activityRadiusKm === radiusKm) {
+      setPendingRadius(null);
+      return;
+    }
     setRangeLoading(true);
     setPendingRadius(radiusKm);
     try {
-      const response = await api.patch(updateTripActivityRadius(planId), { radiusKm });
+      const response = await api.patch(updateTripActivityRadius(planId), { radiusKm, location });
       const data = response.data?.data;
       setResult((current) => current ? {
         ...current,
@@ -627,6 +667,55 @@ export default function TripPlannerPage() {
     } finally {
       setRangeLoading(false);
       setPendingRadius(null);
+    }
+  };
+
+  const changeActivityRadius = async (radiusKm: number) => {
+    await refreshActivitySearch(radiusKm);
+  };
+
+  const searchActivityLocation = async () => {
+    const query = locationQuery.trim();
+    if (query.length < 3) {
+      toast.error('Enter at least 3 characters to search for an area');
+      return;
+    }
+    setLocationSearching(true);
+    try {
+      const response = await api.get(autocompletePlaces(query));
+      const predictions = response.data?.data?.predictions || [];
+      setLocationPredictions(predictions);
+      if (predictions.length === 0) toast.error('No matching locations found');
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Unable to search locations');
+    } finally {
+      setLocationSearching(false);
+    }
+  };
+
+  const chooseActivityLocation = async (prediction: PlacePrediction) => {
+    if (!planId || !result) return;
+    setLocationSearching(true);
+    try {
+      const response = await api.get(getPlaceDetails(prediction.place_id));
+      const place = response.data?.data;
+      const latitude = Number(place?.geometry?.location?.lat);
+      const longitude = Number(place?.geometry?.location?.lng);
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) throw new Error('This location has no map coordinates');
+      const location = {
+        name: prediction.structured_formatting?.main_text || prediction.description,
+        address: place.formatted_address || prediction.description,
+        placeId: place.place_id || prediction.place_id,
+        latitude,
+        longitude,
+      };
+      setLocationQuery(location.name);
+      setLocationPredictions([]);
+      await refreshActivitySearch(result.intent.activityRadiusKm || 5, location);
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || error.message || 'Unable to use this location');
+    } finally {
+      setLocationSearching(false);
     }
   };
 
@@ -1105,6 +1194,16 @@ export default function TripPlannerPage() {
                   </span>
                 </div>
 
+                {!chosenApartment && (
+                  <button
+                    type="button"
+                    onClick={skipStays}
+                    className="mt-3 inline-flex items-center gap-1.5 text-xs font-extrabold text-[#806000] underline decoration-[#d7b64d] underline-offset-4 transition hover:text-[#4f3b00] dark:text-[#ffcf3d] dark:hover:text-[#ffe38a]"
+                  >
+                    Skip stays and explore activities <ArrowRight size={13} />
+                  </button>
+                )}
+
                 {selectedApartment ? (
                   <div
                     key={selectedApartment.id}
@@ -1279,13 +1378,14 @@ export default function TripPlannerPage() {
           </aside>
         </div>
 
-        {result?.activities && (result.activities.length > 0 || chosenApartment) && (
+        {result && planId && (
           <section id="activity-recommendations" className="mt-6 scroll-mt-24 rounded-3xl border border-[#e8e9ec] bg-white p-5 sm:p-7 dark:border-[#353c47] dark:bg-[#1c222c]">
             <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
               <div>
                 <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[#8b6700] dark:text-[#ffbf00]">Verified nearby recommendations</p>
-                <h2 className="mt-1 font-display text-2xl font-black text-[#17191b] dark:text-white">Choose what belongs in your trip</h2>
-                <p className="mt-2 text-sm text-[#737981] dark:text-[#b3bac4]">Add or remove activities—the itinerary remains yours to shape.</p>
+                <h2 className="mt-1 font-display text-2xl font-black text-[#17191b] dark:text-white">{staySkipped && !result.intent.activityLocation ? 'Where would you like to explore?' : 'Choose what belongs in your trip'}</h2>
+                <p className="mt-2 text-sm text-[#737981] dark:text-[#b3bac4]">{staySkipped && !result.intent.activityLocation ? 'Search and select an area to get activity recommendations without booking a stay.' : 'Add or remove activities—the itinerary remains yours to shape.'}</p>
+                <span className="mt-3 inline-flex rounded-full bg-[#eef7f0] px-2.5 py-1 text-[10px] font-extrabold text-[#347047] dark:bg-[#173322] dark:text-[#87d69d]">Booking a stay is optional</span>
                 <p className="mt-2 text-[10px] font-medium text-[#969ba2]">Place details provided by <span translate="no" className="whitespace-nowrap font-bold text-[#666b72] dark:text-[#c4cad2]">Google Maps</span></p>
               </div>
               <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none]">
@@ -1302,30 +1402,74 @@ export default function TripPlannerPage() {
               </div>
             </div>
 
-            <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-[#eceef1] bg-[#fafafa] p-4 sm:flex-row sm:items-center sm:justify-between dark:border-[#353c47] dark:bg-[#151a22]">
+            <div className="mt-5 rounded-2xl border border-[#eceef1] bg-[#fafafa] p-4 dark:border-[#353c47] dark:bg-[#151a22]">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                <label className="min-w-0 flex-1">
+                  <span className="text-xs font-black text-[#25292d] dark:text-white">Search activities around another location</span>
+                  <span className="mt-1 block text-[11px] text-[#7b8189] dark:text-[#aeb5bf]">Your stay can remain in Ikeja while you explore Lekki, Victoria Island or anywhere else.</span>
+                  <div className="relative mt-2">
+                    <MapPin size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#92989f]" />
+                    <input
+                      ref={activityLocationInputRef}
+                      value={locationQuery}
+                      onChange={(event) => setLocationQuery(event.target.value)}
+                      onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void searchActivityLocation(); } }}
+                      placeholder="Search an area, landmark or city"
+                      className="h-11 w-full rounded-xl border border-[#dfe2e6] bg-white pl-10 pr-3 text-sm font-semibold text-[#25292d] outline-none transition focus:border-[#e3aa00] focus:ring-2 focus:ring-[#ffbf00]/20 dark:border-[#3a424e] dark:bg-[#1c222c] dark:text-white"
+                    />
+                  </div>
+                </label>
+                <button type="button" disabled={locationSearching} onClick={() => void searchActivityLocation()} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#17191b] px-5 text-xs font-extrabold text-white transition hover:bg-[#303438] disabled:opacity-60 dark:bg-[#ffbf00] dark:text-[#17191b]">
+                  {locationSearching ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />} Search
+                </button>
+              </div>
+
+              {locationPredictions.length > 0 && (
+                <div className="mt-3 overflow-hidden rounded-xl border border-[#dfe2e6] bg-white dark:border-[#3a424e] dark:bg-[#1c222c]">
+                  {locationPredictions.map((prediction) => (
+                    <button key={prediction.place_id} type="button" disabled={locationSearching} onClick={() => void chooseActivityLocation(prediction)} className="flex w-full items-start gap-3 border-b border-[#eef0f2] px-4 py-3 text-left transition last:border-0 hover:bg-[#fff8df] disabled:opacity-60 dark:border-[#303743] dark:hover:bg-[#2b2618]">
+                      <MapPin size={15} className="mt-0.5 shrink-0 text-[#d8a000]" />
+                      <span className="min-w-0"><strong className="block text-xs text-[#25292d] dark:text-white">{prediction.structured_formatting?.main_text || prediction.description}</strong>{prediction.structured_formatting?.secondary_text && <span className="mt-0.5 block text-[10px] text-[#858b93]">{prediction.structured_formatting.secondary_text}</span>}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {staySkipped && !result.intent.activityLocation && (
+                <div className="mt-4 flex items-start gap-3 rounded-xl border border-[#efd77f] bg-[#fff8df] p-3.5 text-xs leading-5 text-[#66500a] dark:border-[#55471d] dark:bg-[#292515] dark:text-[#f2d77d]">
+                  <Compass size={17} className="mt-0.5 shrink-0" />
+                  <span><strong className="block text-[#3d310b] dark:text-[#fff0b5]">Select an exploration area to continue</strong>We won’t use an apartment’s location after you skip stays.</span>
+                </div>
+              )}
+
+              {(!staySkipped || Boolean(result.intent.activityLocation)) && <div className="mt-5 flex flex-col gap-3 border-t border-[#e5e7ea] pt-4 sm:flex-row sm:items-center sm:justify-between dark:border-[#343b46]">
               <div>
                 <p className="text-xs font-black text-[#25292d] dark:text-white">How far should we look?</p>
-                <p className="mt-1 text-[11px] text-[#7b8189] dark:text-[#aeb5bf]">Measured from your primary stay. A wider range can increase driving time.</p>
+                <p className="mt-1 text-[11px] text-[#7b8189] dark:text-[#aeb5bf]">
+                  Measured from {result.intent.activityLocation?.name || (chosenApartment ? 'your primary stay' : 'the recommended stay')}. A wider range can increase driving time.
+                </p>
               </div>
-              <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none]">
-                {[2, 5, 10, 15, 25].map((radiusKm) => {
-                  const selected = (result.intent.activityRadiusKm || 5) === radiusKm;
-                  return (
-                    <button
-                      key={radiusKm}
-                      type="button"
-                      disabled={rangeLoading}
-                      onClick={() => void changeActivityRadius(radiusKm)}
-                      className={`shrink-0 rounded-full border px-3.5 py-2 text-xs font-extrabold transition disabled:cursor-wait disabled:opacity-60 ${selected ? 'border-[#ffbf00] bg-[#ffbf00] text-[#17191b]' : 'border-[#dfe2e6] bg-white text-[#626970] hover:border-[#d2a000] dark:border-[#3a424e] dark:bg-[#1c222c] dark:text-[#c0c6cf]'}`}
-                    >
-                      {pendingRadius === radiusKm ? <Loader2 size={13} className="inline animate-spin" /> : `${radiusKm} km`}
-                    </button>
-                  );
-                })}
+              <div className="w-full sm:max-w-sm">
+                <div className="mb-2 flex items-center justify-between text-[10px] font-bold text-[#858b93]"><span>1 km</span><span className="rounded-full bg-[#ffbf00] px-2.5 py-1 text-[#17191b]">{pendingRadius ?? result.intent.activityRadiusKm ?? 5} km</span><span>25 km</span></div>
+                <input
+                  type="range"
+                  min="1"
+                  max="25"
+                  step="1"
+                  value={pendingRadius ?? result.intent.activityRadiusKm ?? 5}
+                  disabled={rangeLoading}
+                  onChange={(event) => setPendingRadius(Number(event.target.value))}
+                  onMouseUp={(event) => void changeActivityRadius(Number(event.currentTarget.value))}
+                  onTouchEnd={(event) => void changeActivityRadius(Number(event.currentTarget.value))}
+                  onKeyUp={(event) => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) void changeActivityRadius(Number(event.currentTarget.value)); }}
+                  className="h-2 w-full cursor-pointer appearance-none rounded-full bg-[#e1e4e8] accent-[#ffbf00] disabled:cursor-wait dark:bg-[#343b46]"
+                  aria-label="Activity search distance"
+                />
               </div>
+              </div>}
             </div>
 
-            {visibleActivities.length > 0 ? <div className="mt-6 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+            {(!staySkipped || Boolean(result.intent.activityLocation)) && (visibleActivities.length > 0 ? <div className="mt-6 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
               {visibleActivities.map((activity) => {
                 const isAdded = Boolean(
                   result.itinerary?.days.some((day) =>
@@ -1435,7 +1579,7 @@ export default function TripPlannerPage() {
                 <p className="font-bold text-[#3d4248] dark:text-white">No matching activities in this range</p>
                 <p className="mt-1 text-sm text-[#858b93]">Try a wider distance or add more interests to your trip.</p>
               </div>
-            )}
+            ))}
           </section>
         )}
 

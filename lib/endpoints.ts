@@ -101,6 +101,8 @@ export const markChatAsRead = (chatId: string) => endpoint2(`chat/${chatId}/read
 export const closeChat = (chatId: string) => endpoint2(`chat/${chatId}/close`);
 export const getNearbyPlaces = (latitude: number, longitude: number) =>
   endpoint2(`places/nearby?latitude=${encodeURIComponent(latitude)}&longitude=${encodeURIComponent(longitude)}`);
+export const autocompletePlaces = (input: string) => endpoint2(`places/autocomplete?input=${encodeURIComponent(input)}`);
+export const getPlaceDetails = (placeId: string) => endpoint2(`places/details/${encodeURIComponent(placeId)}`);
 export const getPlacePhoto = (placeId: string) => endpoint2(`places/photo/${encodeURIComponent(placeId)}`);
 export const tripPlannerMessage = endpoint2("trip-planner/message");
 export const getTripPlans = endpoint2("trip-planner/plans");
