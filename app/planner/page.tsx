@@ -11,18 +11,27 @@ import {
   BedDouble,
   Bot,
   CalendarDays,
+  Camera,
   Check,
+  ChevronDown,
+  ChevronUp,
+  Clock3,
   Compass,
   Loader2,
   MapPin,
+  Moon,
   Plus,
   RotateCcw,
   Send,
   Share2,
+  ShoppingBag,
   Sparkles,
   Trash2,
+  Trees,
+  Utensils,
   Users,
   Wallet,
+  Waves,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import AppShell from '@/components/AppShell';
@@ -130,6 +139,24 @@ const starterPrompts = [
   'Give me a lively three-day Lagos experience',
 ];
 
+const quickChoiceGroups = [
+  {
+    label: 'How long?',
+    icon: CalendarDays,
+    choices: ['1 day', '2–3 days', '4–7 days'],
+  },
+  {
+    label: 'What budget?',
+    icon: Wallet,
+    choices: ['Under ₦250,000', '₦500,000 total', 'Luxury — flexible'],
+  },
+  {
+    label: 'What experience?',
+    icon: Sparkles,
+    choices: ['Food and culture', 'Nature and relaxation', 'Nightlife', 'Family activities'],
+  },
+];
+
 const answerSuggestions: Record<string, string[]> = {
   destination: ['Ikeja, Lagos', 'Jos, Plateau', 'Abuja'],
   datesOrDuration: ['This weekend', '3 days', '5 days'],
@@ -225,6 +252,21 @@ export default function TripPlannerPage() {
         (activity) => activityCategory === 'All' || activity.types.includes(activityCategory)
       ),
     [activityCategory, result?.activities]
+  );
+
+  const plannerSteps = useMemo(
+    () => [
+      { label: 'Destination', complete: Boolean(result?.intent.destination) },
+      {
+        label: 'Trip details',
+        complete: Boolean(
+          result?.intent.durationDays || result?.intent.startDate || result?.intent.budget
+        ),
+      },
+      { label: 'Interests', complete: Boolean(result?.intent.interests?.length) },
+      { label: 'Your plan', complete: Boolean(result?.itinerary?.days?.length) },
+    ],
+    [result]
   );
 
   const sendMessage = async (message: string, appendUser = true) => {
@@ -413,6 +455,52 @@ export default function TripPlannerPage() {
     await persistPlan(itinerary);
   };
 
+  const updateActivityTime = async (
+    dayNumber: number,
+    activityIndex: number,
+    time: string
+  ) => {
+    if (!result?.itinerary || !time.trim()) return;
+    const itinerary = {
+      ...result.itinerary,
+      days: result.itinerary.days.map((day) =>
+        day.day === dayNumber
+          ? {
+              ...day,
+              activities: day.activities.map((activity, index) =>
+                index === activityIndex ? { ...activity, time: time.trim().slice(0, 30) } : activity
+              ),
+            }
+          : day
+      ),
+    };
+    await persistPlan(itinerary);
+  };
+
+  const moveActivity = async (
+    dayNumber: number,
+    activityIndex: number,
+    direction: -1 | 1
+  ) => {
+    if (!result?.itinerary) return;
+    const destinationIndex = activityIndex + direction;
+    const day = result.itinerary.days.find((item) => item.day === dayNumber);
+    if (!day || destinationIndex < 0 || destinationIndex >= day.activities.length) return;
+
+    const reordered = [...day.activities];
+    [reordered[activityIndex], reordered[destinationIndex]] = [
+      reordered[destinationIndex],
+      reordered[activityIndex],
+    ];
+    const itinerary = {
+      ...result.itinerary,
+      days: result.itinerary.days.map((item) =>
+        item.day === dayNumber ? { ...item, activities: reordered } : item
+      ),
+    };
+    await persistPlan(itinerary);
+  };
+
   const sharePlan = async () => {
     if (!result?.itinerary) return;
     const itineraryText = result.itinerary.days
@@ -458,9 +546,10 @@ export default function TripPlannerPage() {
   return (
     <AppShell>
       <main className="mx-auto max-w-[1320px] pb-16">
-        <header className="relative overflow-hidden rounded-[28px] border border-[#f1dfac] bg-[radial-gradient(circle_at_top_right,_#fff2b7,_#fffaf0_45%,_#ffffff_78%)] px-5 py-8 sm:px-9 sm:py-10 dark:border-[#403821] dark:bg-[radial-gradient(circle_at_top_right,_#3d3215,_#1c222c_50%,_#141922_80%)]">
-          <div className="absolute -right-12 -top-16 h-52 w-52 rounded-full bg-[#ffbf00]/20 blur-3xl" />
-          <div className="relative max-w-3xl">
+        <header className="relative overflow-hidden rounded-[32px] border border-[#f1dfac] bg-[radial-gradient(circle_at_top_right,_#fff0a8,_#fffaf0_42%,_#ffffff_78%)] px-5 py-8 sm:px-9 sm:py-10 dark:border-[#403821] dark:bg-[radial-gradient(circle_at_top_right,_#4a380e,_#1c222c_48%,_#10151d_82%)]">
+          <div className="absolute -right-12 -top-16 h-64 w-64 rounded-full bg-[#ffbf00]/25 blur-3xl" />
+          <div className="relative grid items-center gap-8 lg:grid-cols-[minmax(0,1fr)_360px]">
+            <div className="max-w-3xl">
             <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-[#e9c75f] bg-white/80 px-3 py-1.5 text-[11px] font-extrabold uppercase tracking-[0.16em] text-[#7c5a00] dark:bg-[#181d25]/80 dark:text-[#ffcb32]">
               <Sparkles size={13} /> AfriBooking AI
             </div>
@@ -470,8 +559,53 @@ export default function TripPlannerPage() {
             <p className="mt-3 max-w-2xl text-sm leading-6 text-[#636970] sm:text-base dark:text-[#bbc2cc]">
               Speak naturally. We search AfriBooking stays first and shape a practical itinerary around what matters to you.
             </p>
+              <div className="mt-6 flex flex-wrap gap-2 text-[11px] font-extrabold text-[#5d4a12] dark:text-[#e5d08d]">
+                <span className="rounded-full bg-white/75 px-3 py-2 shadow-sm dark:bg-black/20">Stays first</span>
+                <span className="rounded-full bg-white/75 px-3 py-2 shadow-sm dark:bg-black/20">Real nearby places</span>
+                <span className="rounded-full bg-white/75 px-3 py-2 shadow-sm dark:bg-black/20">Saved privately</span>
+              </div>
+            </div>
+
+            <div className="relative hidden min-h-[230px] overflow-hidden rounded-[28px] border border-white/70 bg-[#17191b] p-6 shadow-[0_24px_70px_rgba(111,78,0,0.22)] lg:block dark:border-[#55471f]">
+              <div className="absolute -right-12 -top-12 h-40 w-40 rounded-full bg-[#ffbf00]/30 blur-2xl" />
+              <div className="absolute -bottom-20 -left-14 h-48 w-48 rounded-full border-[32px] border-[#ffbf00]/10" />
+              <div className="relative flex h-full flex-col justify-between">
+                <div className="flex items-center justify-between">
+                  <div className="grid h-11 w-11 place-items-center rounded-2xl bg-[#ffbf00] text-[#17191b]"><Bot size={23} /></div>
+                  <span className="rounded-full border border-white/15 px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-[0.14em] text-white/70">Live planner</span>
+                </div>
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffcb32]">Your Africa experience</p>
+                  <p className="mt-2 max-w-[250px] text-2xl font-black leading-tight text-white">One conversation. A complete trip.</p>
+                  <div className="mt-5 flex items-center gap-2 text-xs font-semibold text-white/65">
+                    <MapPin size={14} className="text-[#ffbf00]" /> Discover · stay · experience
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </header>
+
+        <section className="relative z-10 mx-3 -mt-4 rounded-2xl border border-[#e7e2d2] bg-white/95 px-4 py-4 shadow-[0_12px_35px_rgba(28,28,24,0.08)] backdrop-blur sm:mx-7 sm:px-6 dark:border-[#353c47] dark:bg-[#1c222c]/95">
+          <div className="grid grid-cols-4 gap-2 sm:gap-4">
+            {plannerSteps.map((step, index) => {
+              const active = !step.complete && plannerSteps.slice(0, index).every((item) => item.complete);
+              return (
+                <div key={step.label} className="relative min-w-0">
+                  {index < plannerSteps.length - 1 && (
+                    <div className={`absolute left-[calc(50%+18px)] right-[calc(-50%+18px)] top-4 h-0.5 ${step.complete ? 'bg-[#ffbf00]' : 'bg-[#e8e9ec] dark:bg-[#363d47]'}`} />
+                  )}
+                  <div className="relative flex flex-col items-center text-center">
+                    <span className={`grid h-8 w-8 place-items-center rounded-full border text-[11px] font-black transition ${step.complete ? 'border-[#ffbf00] bg-[#ffbf00] text-[#17191b]' : active ? 'border-[#d6a000] bg-[#fff8df] text-[#9b7300] ring-4 ring-[#ffbf00]/10 dark:bg-[#302916]' : 'border-[#dfe1e5] bg-white text-[#9ca1a8] dark:border-[#3a424e] dark:bg-[#141922]'}`}>
+                      {step.complete ? <Check size={14} strokeWidth={3} /> : index + 1}
+                    </span>
+                    <span className={`mt-2 truncate text-[9px] font-extrabold uppercase tracking-wide sm:text-[10px] ${step.complete || active ? 'text-[#393d42] dark:text-white' : 'text-[#a0a5ac]'}`}>{step.label}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
 
         <section className="mt-5 rounded-3xl border border-[#e8e9ec] bg-white p-4 sm:p-5 dark:border-[#353c47] dark:bg-[#1c222c]">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -516,25 +650,37 @@ export default function TripPlannerPage() {
           </div>
         </section>
 
-        <section className="mt-5 rounded-3xl border border-[#eadfbd] bg-[#fffaf0] p-4 sm:p-5 dark:border-[#403821] dark:bg-[#1c1e20]">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="max-w-md">
-              <p className="text-xs font-black text-[#17191b] dark:text-white">Shape the trip visually or keep speaking naturally</p>
-              <p className="mt-1 text-[11px] leading-5 text-[#777e87]">These shortcuts become part of the same conversation—there is no rigid form to complete.</p>
+        <section className="mt-5 rounded-3xl border border-[#eadfbd] bg-[#fffaf0] p-4 sm:p-6 dark:border-[#403821] dark:bg-[#1c1e20]">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div className="max-w-xl">
+              <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[#9a7000] dark:text-[#ffbf00]">Quick choices</p>
+              <h2 className="mt-1 text-base font-black text-[#17191b] dark:text-white">Personalize without filling a long form</h2>
+              <p className="mt-1 text-[11px] leading-5 text-[#777e87]">Tap an answer or simply describe everything in your own words below.</p>
             </div>
-            <div className="flex max-w-3xl gap-2 overflow-x-auto pb-1 [scrollbar-width:none]">
-              {['2–3 days', 'Under ₦250,000', 'Food and culture', 'Nature and relaxation', 'Nightlife', 'Family activities'].map((preference) => (
-                <button
-                  key={preference}
-                  type="button"
-                  disabled={loading}
-                  onClick={() => void sendMessage(preference)}
-                  className="shrink-0 rounded-full border border-[#e4cf8f] bg-white px-3.5 py-2 text-xs font-extrabold text-[#635018] transition hover:border-[#e0a600] hover:bg-[#fff4c8] disabled:opacity-50 dark:border-[#4a422d] dark:bg-[#141922] dark:text-[#e8d99d]"
-                >
-                  {preference}
-                </button>
-              ))}
-            </div>
+            <span className="rounded-full border border-[#e4cf8f] bg-white px-3 py-1.5 text-[10px] font-bold text-[#7a6420] dark:border-[#4a422d] dark:bg-[#141922] dark:text-[#e8d99d]">Every choice stays editable</span>
+          </div>
+          <div className="mt-5 grid gap-3 lg:grid-cols-3">
+            {quickChoiceGroups.map(({ label, icon: Icon, choices }) => (
+              <div key={label} className="rounded-2xl border border-[#eadfbd] bg-white p-4 shadow-sm dark:border-[#3d392e] dark:bg-[#141922]">
+                <div className="flex items-center gap-2 text-xs font-black text-[#25292d] dark:text-white">
+                  <span className="grid h-8 w-8 place-items-center rounded-xl bg-[#fff3c2] text-[#a47600] dark:bg-[#302916] dark:text-[#ffbf00]"><Icon size={15} /></span>
+                  {label}
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {choices.map((preference) => (
+                    <button
+                      key={preference}
+                      type="button"
+                      disabled={loading}
+                      onClick={() => void sendMessage(preference)}
+                      className="rounded-xl border border-[#e4e5e8] bg-[#fafafa] px-3 py-2 text-[11px] font-extrabold text-[#5d6269] transition hover:-translate-y-0.5 hover:border-[#e0a600] hover:bg-[#fff4c8] disabled:opacity-50 dark:border-[#343b45] dark:bg-[#1c222c] dark:text-[#d2d7df]"
+                    >
+                      {preference}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
         </section>
 
@@ -579,9 +725,20 @@ export default function TripPlannerPage() {
               ))}
               {loading && (
                 <div className="flex justify-start">
-                  <div className="inline-flex items-center gap-2 rounded-2xl rounded-bl-md border border-[#eceef1] bg-[#f7f8fa] px-4 py-3 text-sm text-[#6d737b] dark:border-[#353c47] dark:bg-[#141922] dark:text-[#b7bec8]">
-                    <Loader2 size={16} className="animate-spin text-[#c58f00]" />
-                    Checking AfriBooking stays first…
+                  <div className="w-full max-w-[430px] rounded-2xl rounded-bl-md border border-[#eadfbd] bg-[linear-gradient(135deg,#fffdf5,#fff7d9)] p-4 shadow-sm dark:border-[#403821] dark:bg-[linear-gradient(135deg,#1a2029,#282317)]">
+                    <div className="flex items-center gap-3">
+                      <div className="grid h-10 w-10 place-items-center rounded-2xl bg-[#ffbf00] text-[#17191b]"><Bot size={19} /></div>
+                      <div>
+                        <p className="text-sm font-black text-[#25292d] dark:text-white">Building your experience</p>
+                        <p className="text-[11px] text-[#777e87] dark:text-[#b7bec8]">This usually takes a few seconds</p>
+                      </div>
+                    </div>
+                    <div className="mt-4 grid gap-2 text-[11px] font-bold">
+                      <PlanningStatus label="Understanding your preferences" complete />
+                      <PlanningStatus label="Checking AfriBooking stays first" active />
+                      <PlanningStatus label="Finding useful places nearby" />
+                      <PlanningStatus label="Shaping your day-by-day plan" />
+                    </div>
                   </div>
                 </div>
               )}
@@ -747,7 +904,7 @@ export default function TripPlannerPage() {
         </div>
 
         {result?.activities && result.activities.length > 0 && (
-          <section className="mt-6 rounded-3xl border border-[#e8e9ec] bg-white p-5 sm:p-7 dark:border-[#353c47] dark:bg-[#1c222c]">
+          <section id="activity-recommendations" className="mt-6 scroll-mt-24 rounded-3xl border border-[#e8e9ec] bg-white p-5 sm:p-7 dark:border-[#353c47] dark:bg-[#1c222c]">
             <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
               <div>
                 <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[#8b6700] dark:text-[#ffbf00]">Verified nearby recommendations</p>
@@ -768,31 +925,47 @@ export default function TripPlannerPage() {
               </div>
             </div>
 
-            <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="mt-6 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
               {visibleActivities.map((activity) => {
                 const isAdded = Boolean(
                   result.itinerary?.days.some((day) =>
                     day.activities.some((item) => item.sourceActivityId === activity.id)
                   )
                 );
+                const mapsUrl = activity.latitude !== undefined && activity.longitude !== undefined
+                  ? `https://www.google.com/maps/search/?api=1&query=${activity.latitude},${activity.longitude}`
+                  : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${activity.name} ${activity.address}`)}`;
                 return (
-                  <article key={activity.id} className="flex min-h-[180px] flex-col rounded-2xl border border-[#e8e9ec] p-5 dark:border-[#353c47] dark:bg-[#181d25]">
-                    <div className="flex items-start justify-between gap-3">
-                      <span className="rounded-full bg-[#fff3c1] px-2.5 py-1 text-[10px] font-extrabold capitalize text-[#765800] dark:bg-[#302916] dark:text-[#ffcf3f]">
-                        {(activity.types[0] || 'Activity').replaceAll('_', ' ')}
-                      </span>
-                      {isAdded && <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-[#2f7b45]"><Check size={12} /> In plan</span>}
+                  <article key={activity.id} className="group flex min-h-[310px] flex-col overflow-hidden rounded-[22px] border border-[#e2e4e7] bg-white shadow-[0_12px_35px_rgba(31,35,41,0.06)] transition hover:-translate-y-1 hover:shadow-[0_18px_45px_rgba(31,35,41,0.12)] dark:border-[#353c47] dark:bg-[#181d25]">
+                    <ActivityArtwork type={activity.types[0]} name={activity.name} />
+                    <div className="flex flex-1 flex-col p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <span className="rounded-full bg-[#fff3c1] px-2.5 py-1 text-[9px] font-extrabold capitalize text-[#765800] dark:bg-[#302916] dark:text-[#ffcf3f]">
+                          {(activity.types[0] || 'Activity').replaceAll('_', ' ')}
+                        </span>
+                        {isAdded && <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-[#2f7b45] dark:text-[#87d69d]"><Check size={12} /> In plan</span>}
+                      </div>
+                      <h3 className="mt-3 line-clamp-2 text-base font-black text-[#17191b] dark:text-white">{activity.name}</h3>
+                      <p className="mt-2 flex items-start gap-1.5 text-xs leading-5 text-[#7a8088] dark:text-[#aeb5bf]"><MapPin size={13} className="mt-0.5 shrink-0" /> <span className="line-clamp-2">{activity.address || result.intent.destination}</span></p>
+                      <div className="mt-auto flex gap-2 pt-4">
+                        <a
+                          href={mapsUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-[#e0e2e5] px-3 py-2.5 text-[11px] font-extrabold text-[#5f656d] transition hover:border-[#c99a0b] dark:border-[#3a424e] dark:text-[#c6ccd5]"
+                        >
+                          <MapPin size={13} /> Map
+                        </a>
+                        <button
+                          type="button"
+                          disabled={isAdded || savingPlan}
+                          onClick={() => void addActivity(activity)}
+                          className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#17191b] px-4 py-2.5 text-xs font-extrabold text-white transition hover:bg-[#303438] disabled:bg-[#edf0f2] disabled:text-[#8b9198] dark:bg-[#ffbf00] dark:text-[#17191b] dark:disabled:bg-[#343a44] dark:disabled:text-[#8f96a1]"
+                        >
+                          {isAdded ? <><Check size={14} /> Added</> : <><Plus size={14} /> Add to plan</>}
+                        </button>
+                      </div>
                     </div>
-                    <h3 className="mt-4 text-base font-black text-[#17191b] dark:text-white">{activity.name}</h3>
-                    <p className="mt-2 flex items-start gap-1.5 text-xs leading-5 text-[#7a8088] dark:text-[#aeb5bf]"><MapPin size={13} className="mt-0.5 shrink-0" /> {activity.address || result.intent.destination}</p>
-                    <button
-                      type="button"
-                      disabled={isAdded || savingPlan}
-                      onClick={() => void addActivity(activity)}
-                      className="mt-auto inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#17191b] px-4 py-2.5 text-xs font-extrabold text-white transition hover:bg-[#303438] disabled:bg-[#edf0f2] disabled:text-[#8b9198] dark:bg-[#ffbf00] dark:text-[#17191b] dark:disabled:bg-[#343a44] dark:disabled:text-[#8f96a1]"
-                    >
-                      {isAdded ? <><Check size={14} /> Added</> : <><Plus size={14} /> Add to plan</>}
-                    </button>
                   </article>
                 );
               })}
@@ -851,35 +1024,140 @@ export default function TripPlannerPage() {
             </div>
 
             {selectedItineraryDay && (
-              <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <div className="mt-7 max-w-4xl">
+                <div className="mb-5 flex items-center justify-between gap-3 rounded-2xl bg-[#f7f8fa] px-4 py-3 dark:bg-[#141922]">
+                  <div>
+                    <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#8e6a00] dark:text-[#ffbf00]">Day {selectedItineraryDay.day}</p>
+                    <h3 className="mt-1 text-sm font-black text-[#25292d] dark:text-white">{selectedItineraryDay.title}</h3>
+                  </div>
+                  <span className="rounded-full bg-white px-3 py-1.5 text-[10px] font-bold text-[#777e87] shadow-sm dark:bg-[#1c222c]">{selectedItineraryDay.activities.length} stops</span>
+                </div>
                 {selectedItineraryDay.activities.map((activity, index) => (
-                  <article key={`${activity.title}-${index}`} className="relative rounded-2xl border border-[#e8e9ec] p-5 dark:border-[#353c47] dark:bg-[#181d25]">
-                    <button
-                      type="button"
-                      onClick={() => void removeActivity(selectedItineraryDay.day, index)}
-                      className="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-lg text-[#9a7777] transition hover:bg-[#fff0f0] hover:text-[#a72c2c] dark:hover:bg-[#382124]"
-                      aria-label={`Remove ${activity.title}`}
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-[10px] font-extrabold uppercase tracking-wide text-[#9a7000] dark:text-[#ffbf00]">{activity.time}</span>
-                      <span className="rounded-full bg-[#f3f4f5] px-2 py-1 text-[10px] font-bold text-[#686e76] dark:bg-[#252c36] dark:text-[#c3c9d2]">{activity.category}</span>
+                  <article key={`${activity.title}-${index}`} className="relative grid grid-cols-[38px_minmax(0,1fr)] gap-3 pb-5 last:pb-0 sm:grid-cols-[52px_minmax(0,1fr)] sm:gap-4">
+                    {index < selectedItineraryDay.activities.length - 1 && <div className="absolute bottom-0 left-[18px] top-10 w-0.5 bg-[#ece3c8] sm:left-[25px] dark:bg-[#3d392e]" />}
+                    <div className="relative z-10 grid h-9 w-9 place-items-center rounded-full border-4 border-white bg-[#17191b] text-[11px] font-black text-white shadow-sm sm:h-12 sm:w-12 dark:border-[#1c222c] dark:bg-[#ffbf00] dark:text-[#17191b]">{index + 1}</div>
+                    <div className="rounded-2xl border border-[#e8e9ec] bg-white p-4 shadow-sm sm:p-5 dark:border-[#353c47] dark:bg-[#181d25]">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <label className="inline-flex items-center gap-1.5 rounded-lg bg-[#fff5ce] px-2.5 py-1.5 text-[10px] font-extrabold text-[#8a6500] dark:bg-[#302916] dark:text-[#ffbf00]">
+                            <Clock3 size={12} />
+                            <input
+                              aria-label={`Time for ${activity.title}`}
+                              defaultValue={activity.time}
+                              maxLength={30}
+                              disabled={savingPlan}
+                              onKeyDown={(event) => {
+                                if (event.key === 'Enter') event.currentTarget.blur();
+                              }}
+                              onBlur={(event) => {
+                                if (event.target.value.trim() !== activity.time) {
+                                  void updateActivityTime(selectedItineraryDay.day, index, event.target.value);
+                                }
+                              }}
+                              className="w-[72px] bg-transparent outline-none placeholder:text-[#a58b42]"
+                            />
+                          </label>
+                          <span className="rounded-full bg-[#f3f4f5] px-2.5 py-1.5 text-[10px] font-bold capitalize text-[#686e76] dark:bg-[#252c36] dark:text-[#c3c9d2]">{activity.category}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button type="button" disabled={index === 0 || savingPlan} onClick={() => void moveActivity(selectedItineraryDay.day, index, -1)} aria-label={`Move ${activity.title} earlier`} className="grid h-8 w-8 place-items-center rounded-lg text-[#777e87] transition hover:bg-[#f2f3f5] disabled:opacity-25 dark:hover:bg-[#252c36]"><ChevronUp size={14} /></button>
+                          <button type="button" disabled={index === selectedItineraryDay.activities.length - 1 || savingPlan} onClick={() => void moveActivity(selectedItineraryDay.day, index, 1)} aria-label={`Move ${activity.title} later`} className="grid h-8 w-8 place-items-center rounded-lg text-[#777e87] transition hover:bg-[#f2f3f5] disabled:opacity-25 dark:hover:bg-[#252c36]"><ChevronDown size={14} /></button>
+                          <button
+                            type="button"
+                            disabled={savingPlan}
+                            onClick={() => void removeActivity(selectedItineraryDay.day, index)}
+                            className="grid h-8 w-8 place-items-center rounded-lg text-[#9a7777] transition hover:bg-[#fff0f0] hover:text-[#a72c2c] disabled:opacity-40 dark:hover:bg-[#382124]"
+                            aria-label={`Remove ${activity.title}`}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+                      <h3 className="mt-3 text-base font-black text-[#17191b] dark:text-white">{activity.title}</h3>
+                      <p className="mt-2 flex items-start gap-1.5 text-xs leading-5 text-[#7a8088] dark:text-[#aeb5bf]"><MapPin size={13} className="mt-0.5 shrink-0" /> {activity.location}</p>
+                      <p className="mt-3 text-sm leading-6 text-[#555b62] dark:text-[#c3c9d2]">{activity.description}</p>
+                      {activity.estimatedCostPerPerson !== undefined && (
+                        <p className="mt-4 text-xs font-extrabold text-[#17191b] dark:text-white">About {formatNaira(activity.estimatedCostPerPerson)} per person</p>
+                      )}
                     </div>
-                    <h3 className="mt-3 text-base font-black text-[#17191b] dark:text-white">{activity.title}</h3>
-                    <p className="mt-2 flex items-start gap-1.5 text-xs leading-5 text-[#7a8088] dark:text-[#aeb5bf]"><MapPin size={13} className="mt-0.5 shrink-0" /> {activity.location}</p>
-                    <p className="mt-3 text-sm leading-6 text-[#555b62] dark:text-[#c3c9d2]">{activity.description}</p>
-                    {activity.estimatedCostPerPerson !== undefined && (
-                      <p className="mt-4 text-xs font-extrabold text-[#17191b] dark:text-white">About {formatNaira(activity.estimatedCostPerPerson)} per person</p>
-                    )}
                   </article>
                 ))}
+                <a
+                  href="#activity-recommendations"
+                  className="ml-[51px] mt-2 inline-flex items-center gap-2 rounded-xl border border-dashed border-[#d8bd6d] bg-[#fffaf0] px-4 py-3 text-xs font-extrabold text-[#765800] transition hover:border-[#d09b00] hover:bg-[#fff4ce] sm:ml-[68px] dark:border-[#55491f] dark:bg-[#282317] dark:text-[#ffcf3f]"
+                >
+                  <Plus size={14} /> Add more activities
+                </a>
               </div>
             )}
           </section>
         )}
       </main>
     </AppShell>
+  );
+}
+
+function PlanningStatus({
+  label,
+  active = false,
+  complete = false,
+}: {
+  label: string;
+  active?: boolean;
+  complete?: boolean;
+}) {
+  return (
+    <div className={`flex items-center gap-2 rounded-xl px-3 py-2 ${active ? 'bg-white shadow-sm dark:bg-black/20' : ''}`}>
+      <span className={`grid h-5 w-5 place-items-center rounded-full ${complete ? 'bg-[#ffbf00] text-[#17191b]' : active ? 'bg-[#fff3c1] text-[#9a7000] dark:bg-[#3c3217] dark:text-[#ffbf00]' : 'border border-[#dbd7ca] text-[#a4a6a8] dark:border-[#4a463b]'}`}>
+        {complete ? <Check size={11} strokeWidth={3} /> : active ? <Loader2 size={11} className="animate-spin" /> : <span className="h-1.5 w-1.5 rounded-full bg-current" />}
+      </span>
+      <span className={active || complete ? 'text-[#4c5055] dark:text-[#e0e4e9]' : 'text-[#9a9ea4] dark:text-[#777e87]'}>{label}</span>
+    </div>
+  );
+}
+
+function ActivityArtwork({ type, name }: { type?: string; name: string }) {
+  const normalized = String(type || '').toLowerCase();
+  let Icon = Compass;
+  let gradient = 'from-[#1d2732] via-[#314456] to-[#d09b00]';
+  let accent = 'bg-[#ffbf00]';
+
+  if (normalized.includes('restaurant') || normalized.includes('food')) {
+    Icon = Utensils;
+    gradient = 'from-[#3d1d16] via-[#8e3e25] to-[#f2a532]';
+    accent = 'bg-[#ffcf4c]';
+  } else if (normalized.includes('park') || normalized.includes('natural')) {
+    Icon = Trees;
+    gradient = 'from-[#12362c] via-[#26705a] to-[#d3ad43]';
+    accent = 'bg-[#d9b541]';
+  } else if (normalized.includes('shopping') || normalized.includes('store')) {
+    Icon = ShoppingBag;
+    gradient = 'from-[#271f4a] via-[#674f9f] to-[#d49a39]';
+    accent = 'bg-[#ffcf5a]';
+  } else if (normalized.includes('night') || normalized.includes('bar')) {
+    Icon = Moon;
+    gradient = 'from-[#11152f] via-[#34276e] to-[#d08445]';
+    accent = 'bg-[#ffbf00]';
+  } else if (normalized.includes('beach') || normalized.includes('water')) {
+    Icon = Waves;
+    gradient = 'from-[#12344c] via-[#1684a6] to-[#e3bd57]';
+    accent = 'bg-[#ffce47]';
+  } else if (normalized.includes('tourist') || normalized.includes('museum')) {
+    Icon = Camera;
+    gradient = 'from-[#3b251b] via-[#8b6040] to-[#d8aa57]';
+    accent = 'bg-[#ffd36a]';
+  }
+
+  return (
+    <div className={`relative h-32 overflow-hidden bg-gradient-to-br ${gradient}`}>
+      <div className="absolute -right-8 -top-12 h-36 w-36 rounded-full border-[22px] border-white/10" />
+      <div className="absolute -bottom-16 left-6 h-32 w-32 rounded-full bg-black/15 blur-xl" />
+      <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/35 to-transparent" />
+      <div className="relative flex h-full items-center justify-between px-5">
+        <div className={`grid h-14 w-14 place-items-center rounded-[20px] ${accent} text-[#17191b] shadow-lg`}><Icon size={27} /></div>
+        <p className="max-w-[58%] text-right text-sm font-black leading-5 text-white drop-shadow-sm">{name}</p>
+      </div>
+    </div>
   );
 }
 
