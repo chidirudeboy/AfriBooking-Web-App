@@ -23,6 +23,7 @@ import {
   Loader2,
   MapPin,
   Moon,
+  Pencil,
   Phone,
   Plus,
   RotateCcw,
@@ -390,6 +391,9 @@ export default function TripPlannerPage() {
   const [showStayComparison, setShowStayComparison] = useState(false);
   const [planPendingDeletion, setPlanPendingDeletion] = useState<SavedPlan | null>(null);
   const [deletingPlan, setDeletingPlan] = useState(false);
+  const [editingPlanTitle, setEditingPlanTitle] = useState(false);
+  const [planTitleDraft, setPlanTitleDraft] = useState('');
+  const [savingPlanTitle, setSavingPlanTitle] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const activityLocationInputRef = useRef<HTMLInputElement>(null);
   const deleteCancelButtonRef = useRef<HTMLButtonElement>(null);
@@ -563,9 +567,10 @@ export default function TripPlannerPage() {
         { role: 'assistant', content: plannerResult.reply },
       ]);
       setSavedPlans((current) => {
+        const existingSummary = current.find((plan) => plan._id === plannerResult.planId);
         const summary: SavedPlan = {
           _id: plannerResult.planId,
-          title: plannerResult.itinerary?.title || `${plannerResult.intent.destination || 'My'} trip`,
+          title: existingSummary?.title || plannerResult.itinerary?.title || `${plannerResult.intent.destination || 'My'} trip`,
           status: plannerResult.planStatus,
           intent: plannerResult.intent,
           itinerary: plannerResult.itinerary,
@@ -608,6 +613,8 @@ export default function TripPlannerPage() {
     setLastRejectedApartmentId(null);
     setShowInterestedStays(false);
     setShowStayComparison(false);
+    setEditingPlanTitle(false);
+    setPlanTitleDraft('');
     setStaySkipped(false);
     setLocationQuery('');
     setLocationPredictions([]);
@@ -619,6 +626,8 @@ export default function TripPlannerPage() {
       setPlansLoading(true);
       const response = await api.get(getTripPlan(selectedPlanId));
       const plan = response.data?.data?.plan as SavedPlan;
+      setEditingPlanTitle(false);
+      setPlanTitleDraft('');
       setPlanId(plan._id);
       setMessages(plan.conversation?.length ? plan.conversation : [initialMessage]);
       setResult(normalizePlannerResult({
@@ -914,6 +923,43 @@ export default function TripPlannerPage() {
       toast.error(error.response?.data?.message || 'Unable to save trip changes');
     } finally {
       setSavingPlan(false);
+    }
+  };
+
+  const startEditingPlanTitle = () => {
+    if (!result?.itinerary) return;
+    setPlanTitleDraft(result.itinerary.title);
+    setEditingPlanTitle(true);
+  };
+
+  const savePlanTitle = async () => {
+    if (!planId || !result?.itinerary || savingPlanTitle) return;
+    const title = planTitleDraft.trim().slice(0, 120);
+    if (!title) {
+      toast.error('Give your trip a name');
+      return;
+    }
+    if (title === result.itinerary.title) {
+      setEditingPlanTitle(false);
+      return;
+    }
+
+    const itinerary = { ...result.itinerary, title };
+    setSavingPlanTitle(true);
+    try {
+      await api.patch(updateTripPlan(planId), { title, itinerary });
+      setResult((current) => current ? { ...current, itinerary } : current);
+      setSavedPlans((current) => current.map((plan) =>
+        plan._id === planId
+          ? { ...plan, title, itinerary, updatedAt: new Date().toISOString() }
+          : plan
+      ));
+      setEditingPlanTitle(false);
+      toast.success('Trip name updated');
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Unable to rename this trip');
+    } finally {
+      setSavingPlanTitle(false);
     }
   };
 
@@ -1805,7 +1851,53 @@ export default function TripPlannerPage() {
             <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
               <div>
                 <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[#8b6700] dark:text-[#ffbf00]">Your evolving itinerary</p>
-                <h2 className="mt-1 font-display text-2xl font-black text-[#17191b] dark:text-white">{result.itinerary.title}</h2>
+                {editingPlanTitle ? (
+                  <div className="mt-1 flex max-w-xl items-center gap-2">
+                    <input
+                      autoFocus
+                      value={planTitleDraft}
+                      maxLength={120}
+                      aria-label="Trip name"
+                      disabled={savingPlanTitle}
+                      onChange={(event) => setPlanTitleDraft(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') void savePlanTitle();
+                        if (event.key === 'Escape' && !savingPlanTitle) setEditingPlanTitle(false);
+                      }}
+                      className="min-w-0 flex-1 rounded-xl border border-[#d7aa20] bg-[#fffaf0] px-3 py-2 font-display text-xl font-black text-[#17191b] outline-none ring-[#ffbf00]/25 transition focus:ring-4 disabled:opacity-60 dark:border-[#6c571b] dark:bg-[#141922] dark:text-white"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void savePlanTitle()}
+                      disabled={savingPlanTitle || !planTitleDraft.trim()}
+                      aria-label="Save trip name"
+                      className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#ffbf00] text-[#17191b] transition hover:bg-[#eeb200] disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {savingPlanTitle ? <Loader2 size={17} className="animate-spin" /> : <Check size={17} strokeWidth={3} />}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingPlanTitle(false)}
+                      disabled={savingPlanTitle}
+                      aria-label="Cancel renaming trip"
+                      className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-[#dde0e4] text-[#6d737b] transition hover:bg-[#f3f4f5] disabled:opacity-50 dark:border-[#3a424e] dark:text-[#c7cdd5] dark:hover:bg-[#252c36]"
+                    >
+                      <X size={17} />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="group/title mt-1 flex items-center gap-2">
+                    <h2 className="font-display text-2xl font-black text-[#17191b] dark:text-white">{result.itinerary.title}</h2>
+                    <button
+                      type="button"
+                      onClick={startEditingPlanTitle}
+                      aria-label="Edit trip name"
+                      className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-[#858b93] opacity-100 transition hover:bg-[#fff3c1] hover:text-[#8b6700] sm:opacity-0 sm:group-hover/title:opacity-100 sm:focus:opacity-100 dark:hover:bg-[#302916] dark:hover:text-[#ffbf00]"
+                    >
+                      <Pencil size={15} />
+                    </button>
+                  </div>
+                )}
                 <p className="mt-2 max-w-3xl text-sm leading-6 text-[#6f757d] dark:text-[#b3bac4]">{result.itinerary.summary}</p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
