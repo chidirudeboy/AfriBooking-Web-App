@@ -46,6 +46,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import api from '@/lib/utils/api';
 import {
   deleteTripPlan,
+  addTripActivity,
   autocompletePlaces,
   getPlaceDetails,
   getPlacePhoto,
@@ -132,6 +133,7 @@ type ActivityCandidate = {
   travelTimeMinutes?: number;
   trafficAware?: boolean;
   recommendationScore?: number;
+  addedByUser?: boolean;
   hasPhoto?: boolean;
   photoAttributions?: Array<{
     displayName: string;
@@ -241,6 +243,69 @@ const initialMessage: ConversationMessage = {
     'Tell me where you are going or the kind of trip you want. I’ll begin with available AfriBooking stays, then build the experience around you.',
 };
 
+const normalizePlannerResult = (raw: any): PlannerResult => {
+  const intent = raw?.intent && typeof raw.intent === 'object' ? raw.intent : {};
+  const activities = Array.isArray(raw?.activities) ? raw.activities.map((activity: any) => ({
+    ...activity,
+    id: String(activity?.id || ''),
+    name: String(activity?.name || 'Saved place'),
+    address: String(activity?.address || ''),
+    types: Array.isArray(activity?.types) ? activity.types : [],
+    photoAttributions: Array.isArray(activity?.photoAttributions) ? activity.photoAttributions : [],
+  })) : [];
+  const itinerary = raw?.itinerary && typeof raw.itinerary === 'object'
+    ? {
+        ...raw.itinerary,
+        title: String(raw.itinerary.title || `${intent.destination || 'My'} itinerary`),
+        summary: String(raw.itinerary.summary || 'Continue shaping your saved trip.'),
+        days: Array.isArray(raw.itinerary.days) ? raw.itinerary.days.map((day: any, index: number) => ({
+          ...day,
+          day: Number(day?.day) || index + 1,
+          title: String(day?.title || `Day ${index + 1}`),
+          activities: Array.isArray(day?.activities) ? day.activities : [],
+        })) : [],
+      }
+    : undefined;
+  const storedPreferences = raw?.stayPreferences && typeof raw.stayPreferences === 'object'
+    ? raw.stayPreferences
+    : {};
+
+  return {
+    ...raw,
+    provider: String(raw?.provider || 'saved'),
+    reply: String(raw?.reply || 'Your trip is ready to continue.'),
+    status: ['gathering', 'ready', 'no_inventory'].includes(raw?.status) ? raw.status : (itinerary ? 'ready' : 'gathering'),
+    planId: String(raw?.planId || raw?._id || ''),
+    planStatus: raw?.planStatus === 'saved' || raw?.status === 'saved' ? 'saved' : 'draft',
+    intent: {
+      ...intent,
+      interests: Array.isArray(intent.interests) ? intent.interests : [],
+      missingFields: Array.isArray(intent.missingFields) ? intent.missingFields : [],
+    },
+    apartments: Array.isArray(raw?.apartments) ? raw.apartments.map((apartment: any) => ({
+      ...apartment,
+      id: String(apartment?.id || apartment?._id || ''),
+      name: String(apartment?.name || 'Saved stay'),
+      city: String(apartment?.city || ''),
+      state: String(apartment?.state || ''),
+      address: String(apartment?.address || ''),
+      description: String(apartment?.description || ''),
+      amenities: Array.isArray(apartment?.amenities) ? apartment.amenities : [],
+      pricePerNight: Number(apartment?.pricePerNight) || 0,
+      bedrooms: Number(apartment?.bedrooms) || 0,
+      guests: Number(apartment?.guests) || 0,
+    })) : [],
+    activities,
+    itinerary,
+    stayPreferences: {
+      ...storedPreferences,
+      interestedApartmentIds: Array.isArray(storedPreferences.interestedApartmentIds) ? storedPreferences.interestedApartmentIds : [],
+      rejectedApartmentIds: Array.isArray(storedPreferences.rejectedApartmentIds) ? storedPreferences.rejectedApartmentIds : [],
+      decisions: Array.isArray(storedPreferences.decisions) ? storedPreferences.decisions : [],
+    },
+  };
+};
+
 const formatNaira = (value: number) =>
   new Intl.NumberFormat('en-NG', {
     style: 'currency',
@@ -287,6 +352,7 @@ export default function TripPlannerPage() {
   const [locationQuery, setLocationQuery] = useState('');
   const [locationPredictions, setLocationPredictions] = useState<PlacePrediction[]>([]);
   const [locationSearching, setLocationSearching] = useState(false);
+  const [placeSearchMode, setPlaceSearchMode] = useState<'area' | 'place'>('area');
   const [staySkipped, setStaySkipped] = useState(false);
   const [activityCategory, setActivityCategory] = useState('All');
   const [failedActivityImages, setFailedActivityImages] = useState<Set<string>>(new Set());
@@ -380,11 +446,11 @@ export default function TripPlannerPage() {
   );
 
   const selectedItineraryDay =
-    result?.itinerary?.days.find((day) => day.day === selectedDay) || result?.itinerary?.days[0];
+    result?.itinerary?.days?.find((day) => day.day === selectedDay) || result?.itinerary?.days?.[0];
 
   const activityCategories = useMemo(() => {
     const categories = new Set(
-      (result?.activities || []).flatMap((activity) => activity.types.slice(0, 1))
+      (result?.activities || []).flatMap((activity) => (activity.types || []).slice(0, 1))
     );
     return ['All', ...Array.from(categories)];
   }, [result?.activities]);
@@ -392,7 +458,7 @@ export default function TripPlannerPage() {
   const visibleActivities = useMemo(
     () =>
       (result?.activities || []).filter(
-        (activity) => activityCategory === 'All' || activity.types.includes(activityCategory)
+        (activity) => activityCategory === 'All' || (activity.types || []).includes(activityCategory)
       ),
     [activityCategory, result?.activities]
   );
@@ -435,7 +501,7 @@ export default function TripPlannerPage() {
         throw new Error(payload?.message || 'Unable to plan this trip right now');
       }
 
-      const plannerResult = payload.data as PlannerResult;
+      const plannerResult = normalizePlannerResult(payload.data);
       setPlanId(plannerResult.planId);
       setResult(plannerResult);
       setSelectedDay(plannerResult.itinerary?.days[0]?.day || 1);
@@ -502,7 +568,7 @@ export default function TripPlannerPage() {
       const plan = response.data?.data?.plan as SavedPlan;
       setPlanId(plan._id);
       setMessages(plan.conversation?.length ? plan.conversation : [initialMessage]);
-      setResult({
+      setResult(normalizePlannerResult({
         provider: 'saved',
         reply: plan.conversation?.at(-1)?.content || 'Your trip is ready to continue.',
         status: plan.itinerary ? 'ready' : 'gathering',
@@ -513,7 +579,7 @@ export default function TripPlannerPage() {
         activities: plan.activities || [],
         itinerary: plan.itinerary,
         stayPreferences: plan.stayPreferences,
-      });
+      }));
       setSelectedDay(plan.itinerary?.days?.[0]?.day || 1);
       setActivityCategory('All');
       toast.success('Trip restored');
@@ -719,6 +785,44 @@ export default function TripPlannerPage() {
     }
   };
 
+  const addSpecificPlace = async (prediction: PlacePrediction) => {
+    if (!planId || !result || locationSearching) return;
+    setLocationSearching(true);
+    try {
+      const response = await api.get(getPlaceDetails(prediction.place_id));
+      const place = response.data?.data;
+      const activity: ActivityCandidate = {
+        id: place.place_id || prediction.place_id,
+        name: place.name || prediction.structured_formatting?.main_text || prediction.description,
+        address: place.formatted_address || prediction.description,
+        latitude: Number.isFinite(Number(place?.geometry?.location?.lat)) ? Number(place.geometry.location.lat) : undefined,
+        longitude: Number.isFinite(Number(place?.geometry?.location?.lng)) ? Number(place.geometry.location.lng) : undefined,
+        types: Array.isArray(place.types) ? place.types : [],
+        primaryType: place.primaryType,
+        rating: place.rating,
+        userRatingCount: place.userRatingCount,
+        phoneNumber: place.phoneNumber,
+        websiteUri: place.websiteUri,
+        googleMapsUri: place.googleMapsUri,
+        priceLevel: place.priceLevel,
+        openNow: place.openNow,
+        hasPhoto: Boolean(place.hasPhoto),
+        photoAttributions: place.photoAttributions,
+        addedByUser: true,
+      };
+      const saved = await api.post(addTripActivity(planId), { activity });
+      setResult((current) => current ? { ...current, activities: saved.data?.data?.activities || [...current.activities, activity] } : current);
+      setLocationQuery('');
+      setLocationPredictions([]);
+      await addActivity(activity);
+      toast.success(`${activity.name} was added to your plan`);
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || error.message || 'Unable to add this place');
+    } finally {
+      setLocationSearching(false);
+    }
+  };
+
   const persistPlan = async (
     itinerary: PlannerResult['itinerary'],
     status: 'draft' | 'saved' = result?.planStatus || 'draft'
@@ -755,7 +859,7 @@ export default function TripPlannerPage() {
       title: activity.name,
       category: activity.types[0]?.replaceAll('_', ' ') || 'Activity',
       location: activity.address,
-      description: 'Added by you from verified nearby recommendations.',
+      description: activity.addedByUser ? 'A specific place you chose for this trip.' : 'Added by you from verified nearby recommendations.',
       sourceActivityId: activity.id,
     };
 
@@ -1383,8 +1487,8 @@ export default function TripPlannerPage() {
             <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
               <div>
                 <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[#8b6700] dark:text-[#ffbf00]">Verified nearby recommendations</p>
-                <h2 className="mt-1 font-display text-2xl font-black text-[#17191b] dark:text-white">{staySkipped && !result.intent.activityLocation ? 'Where would you like to explore?' : 'Choose what belongs in your trip'}</h2>
-                <p className="mt-2 text-sm text-[#737981] dark:text-[#b3bac4]">{staySkipped && !result.intent.activityLocation ? 'Search and select an area to get activity recommendations without booking a stay.' : 'Add or remove activities—the itinerary remains yours to shape.'}</p>
+                <h2 className="mt-1 font-display text-2xl font-black text-[#17191b] dark:text-white">{staySkipped && !result.intent.activityLocation ? (placeSearchMode === 'place' ? 'Add places you already know' : 'Where would you like to explore?') : 'Choose what belongs in your trip'}</h2>
+                <p className="mt-2 text-sm text-[#737981] dark:text-[#b3bac4]">{staySkipped && !result.intent.activityLocation ? (placeSearchMode === 'place' ? 'Search by name and add restaurants, attractions or landmarks directly to your plan.' : 'Search and select an area to get activity recommendations without booking a stay.') : 'Add or remove activities—the itinerary remains yours to shape.'}</p>
                 <span className="mt-3 inline-flex rounded-full bg-[#eef7f0] px-2.5 py-1 text-[10px] font-extrabold text-[#347047] dark:bg-[#173322] dark:text-[#87d69d]">Booking a stay is optional</span>
                 <p className="mt-2 text-[10px] font-medium text-[#969ba2]">Place details provided by <span translate="no" className="whitespace-nowrap font-bold text-[#666b72] dark:text-[#c4cad2]">Google Maps</span></p>
               </div>
@@ -1403,10 +1507,18 @@ export default function TripPlannerPage() {
             </div>
 
             <div className="mt-5 rounded-2xl border border-[#eceef1] bg-[#fafafa] p-4 dark:border-[#353c47] dark:bg-[#151a22]">
+              <div className="mb-4 grid grid-cols-2 gap-1 rounded-xl bg-[#eceef1] p-1 dark:bg-[#252c36]">
+                <button type="button" onClick={() => { setPlaceSearchMode('area'); setLocationPredictions([]); setLocationQuery(''); }} className={`rounded-lg px-3 py-2 text-xs font-extrabold transition ${placeSearchMode === 'area' ? 'bg-white text-[#17191b] shadow-sm dark:bg-[#171c24] dark:text-white' : 'text-[#737981] dark:text-[#aeb5bf]'}`}>
+                  Explore an area
+                </button>
+                <button type="button" onClick={() => { setPlaceSearchMode('place'); setLocationPredictions([]); setLocationQuery(''); window.setTimeout(() => activityLocationInputRef.current?.focus(), 50); }} className={`rounded-lg px-3 py-2 text-xs font-extrabold transition ${placeSearchMode === 'place' ? 'bg-white text-[#17191b] shadow-sm dark:bg-[#171c24] dark:text-white' : 'text-[#737981] dark:text-[#aeb5bf]'}`}>
+                  Add a specific place
+                </button>
+              </div>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
                 <label className="min-w-0 flex-1">
-                  <span className="text-xs font-black text-[#25292d] dark:text-white">Search activities around another location</span>
-                  <span className="mt-1 block text-[11px] text-[#7b8189] dark:text-[#aeb5bf]">Your stay can remain in Ikeja while you explore Lekki, Victoria Island or anywhere else.</span>
+                  <span className="text-xs font-black text-[#25292d] dark:text-white">{placeSearchMode === 'area' ? 'Search activities around another location' : 'Search for a restaurant, attraction or place'}</span>
+                  <span className="mt-1 block text-[11px] text-[#7b8189] dark:text-[#aeb5bf]">{placeSearchMode === 'area' ? 'Your stay can remain in Ikeja while you explore Lekki, Victoria Island or anywhere else.' : 'Already have somewhere in mind? Find it by name and add it directly to your itinerary.'}</span>
                   <div className="relative mt-2">
                     <MapPin size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#92989f]" />
                     <input
@@ -1414,28 +1526,29 @@ export default function TripPlannerPage() {
                       value={locationQuery}
                       onChange={(event) => setLocationQuery(event.target.value)}
                       onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void searchActivityLocation(); } }}
-                      placeholder="Search an area, landmark or city"
+                      placeholder={placeSearchMode === 'area' ? 'Search an area, landmark or city' : 'Example: The George Lagos'}
                       className="h-11 w-full rounded-xl border border-[#dfe2e6] bg-white pl-10 pr-3 text-sm font-semibold text-[#25292d] outline-none transition focus:border-[#e3aa00] focus:ring-2 focus:ring-[#ffbf00]/20 dark:border-[#3a424e] dark:bg-[#1c222c] dark:text-white"
                     />
                   </div>
                 </label>
                 <button type="button" disabled={locationSearching} onClick={() => void searchActivityLocation()} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#17191b] px-5 text-xs font-extrabold text-white transition hover:bg-[#303438] disabled:opacity-60 dark:bg-[#ffbf00] dark:text-[#17191b]">
-                  {locationSearching ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />} Search
+                  {locationSearching ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />} {placeSearchMode === 'area' ? 'Search' : 'Find place'}
                 </button>
               </div>
 
               {locationPredictions.length > 0 && (
                 <div className="mt-3 overflow-hidden rounded-xl border border-[#dfe2e6] bg-white dark:border-[#3a424e] dark:bg-[#1c222c]">
                   {locationPredictions.map((prediction) => (
-                    <button key={prediction.place_id} type="button" disabled={locationSearching} onClick={() => void chooseActivityLocation(prediction)} className="flex w-full items-start gap-3 border-b border-[#eef0f2] px-4 py-3 text-left transition last:border-0 hover:bg-[#fff8df] disabled:opacity-60 dark:border-[#303743] dark:hover:bg-[#2b2618]">
+                    <button key={prediction.place_id} type="button" disabled={locationSearching} onClick={() => void (placeSearchMode === 'area' ? chooseActivityLocation(prediction) : addSpecificPlace(prediction))} className="flex w-full items-center gap-3 border-b border-[#eef0f2] px-4 py-3 text-left transition last:border-0 hover:bg-[#fff8df] disabled:opacity-60 dark:border-[#303743] dark:hover:bg-[#2b2618]">
                       <MapPin size={15} className="mt-0.5 shrink-0 text-[#d8a000]" />
-                      <span className="min-w-0"><strong className="block text-xs text-[#25292d] dark:text-white">{prediction.structured_formatting?.main_text || prediction.description}</strong>{prediction.structured_formatting?.secondary_text && <span className="mt-0.5 block text-[10px] text-[#858b93]">{prediction.structured_formatting.secondary_text}</span>}</span>
+                      <span className="min-w-0 flex-1"><strong className="block text-xs text-[#25292d] dark:text-white">{prediction.structured_formatting?.main_text || prediction.description}</strong>{prediction.structured_formatting?.secondary_text && <span className="mt-0.5 block text-[10px] text-[#858b93]">{prediction.structured_formatting.secondary_text}</span>}</span>
+                      <span className="shrink-0 rounded-full bg-[#ffbf00] px-2.5 py-1 text-[9px] font-black text-[#17191b]">{placeSearchMode === 'area' ? 'Explore here' : 'Add to plan'}</span>
                     </button>
                   ))}
                 </div>
               )}
 
-              {staySkipped && !result.intent.activityLocation && (
+              {staySkipped && !result.intent.activityLocation && placeSearchMode === 'area' && (
                 <div className="mt-4 flex items-start gap-3 rounded-xl border border-[#efd77f] bg-[#fff8df] p-3.5 text-xs leading-5 text-[#66500a] dark:border-[#55471d] dark:bg-[#292515] dark:text-[#f2d77d]">
                   <Compass size={17} className="mt-0.5 shrink-0" />
                   <span><strong className="block text-[#3d310b] dark:text-[#fff0b5]">Select an exploration area to continue</strong>We won’t use an apartment’s location after you skip stays.</span>
@@ -1515,7 +1628,7 @@ export default function TripPlannerPage() {
                     <div className="flex flex-1 flex-col p-4">
                       <div className="flex items-start justify-between gap-3">
                         <span className="rounded-full bg-[#fff3c1] px-2.5 py-1 text-[9px] font-extrabold capitalize text-[#765800] dark:bg-[#302916] dark:text-[#ffcf3f]">
-                          {activity.primaryType || (activity.types[0] || 'Activity').replaceAll('_', ' ')}
+                          {activity.addedByUser ? 'Added by you' : activity.primaryType || (activity.types[0] || 'Activity').replaceAll('_', ' ')}
                         </span>
                         <div className="flex items-center gap-2">
                           {activity.openNow !== undefined && <span className={`rounded-full px-2 py-1 text-[9px] font-extrabold ${activity.openNow ? 'bg-[#e9f8ed] text-[#25753b] dark:bg-[#173322] dark:text-[#87d69d]' : 'bg-[#f5ecec] text-[#985050] dark:bg-[#382124] dark:text-[#e6a3a3]'}`}>{activity.openNow ? 'Open now' : 'Closed'}</span>}

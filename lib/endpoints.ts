@@ -114,6 +114,7 @@ export const undoTripStayPreference = (planId: string) => endpoint2(`trip-planne
 export const resetTripStayPreferences = (planId: string) => endpoint2(`trip-planner/plans/${planId}/stay-preferences`);
 export const selectTripStay = (planId: string) => endpoint2(`trip-planner/plans/${planId}/select-stay`);
 export const updateTripActivityRadius = (planId: string) => endpoint2(`trip-planner/plans/${planId}/activity-radius`);
+export const addTripActivity = (planId: string) => endpoint2(`trip-planner/plans/${planId}/activities`);
 
 // Request endpoints
 export const createUserRequest = endpoint2("user/request/create");
