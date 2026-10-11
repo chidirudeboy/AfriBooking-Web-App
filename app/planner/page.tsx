@@ -17,15 +17,19 @@ import {
   ChevronUp,
   Clock3,
   Compass,
+  ExternalLink,
+  Globe2,
   Loader2,
   MapPin,
   Moon,
+  Phone,
   Plus,
   RotateCcw,
   Send,
   Share2,
   ShoppingBag,
   Sparkles,
+  Star,
   Trash2,
   Trees,
   Utensils,
@@ -39,6 +43,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import api from '@/lib/utils/api';
 import {
   deleteTripPlan,
+  getPlacePhoto,
   getTripPlan,
   getTripPlans,
   tripPlannerMessage,
@@ -95,6 +100,20 @@ type ActivityCandidate = {
   types: string[];
   latitude?: number;
   longitude?: number;
+  primaryType?: string;
+  rating?: number;
+  userRatingCount?: number;
+  phoneNumber?: string;
+  websiteUri?: string;
+  googleMapsUri?: string;
+  priceLevel?: string;
+  openNow?: boolean;
+  hasPhoto?: boolean;
+  photoAttributions?: Array<{
+    displayName: string;
+    uri?: string;
+    photoUri?: string;
+  }>;
 };
 
 type ItineraryDay = {
@@ -180,6 +199,27 @@ const formatNaira = (value: number) =>
     maximumFractionDigits: 0,
   }).format(value);
 
+const formatPlacePrice = (priceLevel?: string) => {
+  const levels: Record<string, string> = {
+    PRICE_LEVEL_FREE: 'Free',
+    PRICE_LEVEL_INEXPENSIVE: 'Budget friendly',
+    PRICE_LEVEL_MODERATE: 'Moderate',
+    PRICE_LEVEL_EXPENSIVE: 'Premium',
+    PRICE_LEVEL_VERY_EXPENSIVE: 'Luxury',
+  };
+  return priceLevel ? levels[priceLevel] : undefined;
+};
+
+const safeExternalUrl = (value?: string) => {
+  if (!value) return undefined;
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:' ? parsed.toString() : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
 export default function TripPlannerPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
@@ -194,6 +234,7 @@ export default function TripPlannerPage() {
   const [plansLoading, setPlansLoading] = useState(true);
   const [savingPlan, setSavingPlan] = useState(false);
   const [activityCategory, setActivityCategory] = useState('All');
+  const [failedActivityImages, setFailedActivityImages] = useState<Set<string>>(new Set());
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -910,6 +951,7 @@ export default function TripPlannerPage() {
                 <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[#8b6700] dark:text-[#ffbf00]">Verified nearby recommendations</p>
                 <h2 className="mt-1 font-display text-2xl font-black text-[#17191b] dark:text-white">Choose what belongs in your trip</h2>
                 <p className="mt-2 text-sm text-[#737981] dark:text-[#b3bac4]">Add or remove activities—the itinerary remains yours to shape.</p>
+                <p className="mt-2 text-[10px] font-medium text-[#969ba2]">Place details provided by <span translate="no" className="whitespace-nowrap font-bold text-[#666b72] dark:text-[#c4cad2]">Google Maps</span></p>
               </div>
               <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none]">
                 {activityCategories.map((category) => (
@@ -932,21 +974,66 @@ export default function TripPlannerPage() {
                     day.activities.some((item) => item.sourceActivityId === activity.id)
                   )
                 );
-                const mapsUrl = activity.latitude !== undefined && activity.longitude !== undefined
+                const mapsUrl = safeExternalUrl(activity.googleMapsUri) || (activity.latitude !== undefined && activity.longitude !== undefined
                   ? `https://www.google.com/maps/search/?api=1&query=${activity.latitude},${activity.longitude}`
-                  : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${activity.name} ${activity.address}`)}`;
+                  : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${activity.name} ${activity.address}`)}`);
+                const websiteUrl = safeExternalUrl(activity.websiteUri);
+                const showPhoto = activity.hasPhoto && !failedActivityImages.has(activity.id);
+                const priceLabel = formatPlacePrice(activity.priceLevel);
                 return (
                   <article key={activity.id} className="group flex min-h-[310px] flex-col overflow-hidden rounded-[22px] border border-[#e2e4e7] bg-white shadow-[0_12px_35px_rgba(31,35,41,0.06)] transition hover:-translate-y-1 hover:shadow-[0_18px_45px_rgba(31,35,41,0.12)] dark:border-[#353c47] dark:bg-[#181d25]">
-                    <ActivityArtwork type={activity.types[0]} name={activity.name} />
+                    {showPhoto ? (
+                      <div className="relative h-40 overflow-hidden bg-[#e8e9ec]">
+                        <Image
+                          src={getPlacePhoto(activity.id)}
+                          alt={activity.name}
+                          fill
+                          unoptimized
+                          sizes="(max-width: 640px) 100vw, (max-width: 1280px) 50vw, 33vw"
+                          className="object-cover transition duration-500 group-hover:scale-105"
+                          onError={() => setFailedActivityImages((current) => new Set(current).add(activity.id))}
+                        />
+                        <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/55 to-transparent" />
+                        {activity.photoAttributions?.length ? (
+                          <div className="absolute bottom-2 left-3 right-3 truncate text-[8px] font-semibold text-white/90">
+                            Photo: {activity.photoAttributions.map((attribution, index) => (
+                              <span key={`${attribution.displayName}-${index}`}>
+                                {index > 0 ? ', ' : ''}
+                                {safeExternalUrl(attribution.uri) ? <a href={safeExternalUrl(attribution.uri)} target="_blank" rel="noreferrer" className="underline">{attribution.displayName}</a> : attribution.displayName}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <ActivityArtwork type={activity.types[0]} name={activity.name} />
+                    )}
                     <div className="flex flex-1 flex-col p-4">
                       <div className="flex items-start justify-between gap-3">
                         <span className="rounded-full bg-[#fff3c1] px-2.5 py-1 text-[9px] font-extrabold capitalize text-[#765800] dark:bg-[#302916] dark:text-[#ffcf3f]">
-                          {(activity.types[0] || 'Activity').replaceAll('_', ' ')}
+                          {activity.primaryType || (activity.types[0] || 'Activity').replaceAll('_', ' ')}
                         </span>
-                        {isAdded && <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-[#2f7b45] dark:text-[#87d69d]"><Check size={12} /> In plan</span>}
+                        <div className="flex items-center gap-2">
+                          {activity.openNow !== undefined && <span className={`rounded-full px-2 py-1 text-[9px] font-extrabold ${activity.openNow ? 'bg-[#e9f8ed] text-[#25753b] dark:bg-[#173322] dark:text-[#87d69d]' : 'bg-[#f5ecec] text-[#985050] dark:bg-[#382124] dark:text-[#e6a3a3]'}`}>{activity.openNow ? 'Open now' : 'Closed'}</span>}
+                          {isAdded && <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-[#2f7b45] dark:text-[#87d69d]"><Check size={12} /> In plan</span>}
+                        </div>
                       </div>
                       <h3 className="mt-3 line-clamp-2 text-base font-black text-[#17191b] dark:text-white">{activity.name}</h3>
+                      {(activity.rating !== undefined || priceLabel) && (
+                        <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-bold text-[#60666d] dark:text-[#c3c9d2]">
+                          {activity.rating !== undefined && (
+                            <span className="inline-flex items-center gap-1"><Star size={13} className="fill-[#ffbf00] text-[#ffbf00]" /> {activity.rating.toFixed(1)} {activity.userRatingCount !== undefined && <span className="font-medium text-[#92979e]">({activity.userRatingCount.toLocaleString()})</span>}</span>
+                          )}
+                          {priceLabel && <><span className="text-[#c6c9cd]">•</span><span>{priceLabel}</span></>}
+                        </div>
+                      )}
                       <p className="mt-2 flex items-start gap-1.5 text-xs leading-5 text-[#7a8088] dark:text-[#aeb5bf]"><MapPin size={13} className="mt-0.5 shrink-0" /> <span className="line-clamp-2">{activity.address || result.intent.destination}</span></p>
+                      {(activity.phoneNumber || websiteUrl) && (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {activity.phoneNumber && <a href={`tel:${activity.phoneNumber}`} className="inline-flex items-center gap-1 rounded-lg bg-[#f5f6f7] px-2.5 py-1.5 text-[10px] font-bold text-[#5f656d] dark:bg-[#252c36] dark:text-[#c6ccd5]"><Phone size={11} /> Call</a>}
+                          {websiteUrl && <a href={websiteUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg bg-[#f5f6f7] px-2.5 py-1.5 text-[10px] font-bold text-[#5f656d] dark:bg-[#252c36] dark:text-[#c6ccd5]"><Globe2 size={11} /> Website <ExternalLink size={9} /></a>}
+                        </div>
+                      )}
                       <div className="mt-auto flex gap-2 pt-4">
                         <a
                           href={mapsUrl}
