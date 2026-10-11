@@ -49,6 +49,7 @@ import {
   getTripPlans,
   tripPlannerMessage,
   resetTripStayPreferences,
+  selectTripStay,
   setTripStayPreference,
   undoTripStayPreference,
   updateTripPlan,
@@ -152,6 +153,7 @@ type StayPreferences = {
   interestedApartmentIds: string[];
   rejectedApartmentIds: string[];
   currentApartmentId?: string;
+  selectedApartmentId?: string;
   decisions: Array<{
     apartmentId: string;
     decision: StayDecision;
@@ -262,6 +264,7 @@ export default function TripPlannerPage() {
   const [stayCardMotion, setStayCardMotion] = useState<'left' | 'right' | null>(null);
   const [lastRejectedApartmentId, setLastRejectedApartmentId] = useState<string | null>(null);
   const [showInterestedStays, setShowInterestedStays] = useState(false);
+  const [showStayComparison, setShowStayComparison] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -284,6 +287,20 @@ export default function TripPlannerPage() {
     };
     void loadPlans();
   }, [router, user]);
+
+  useEffect(() => {
+    if (!showStayComparison) return;
+    const previousOverflow = document.body.style.overflow;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setShowStayComparison(false);
+    };
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [showStayComparison]);
 
   const suggestions = useMemo(() => {
     if (!result) return starterPrompts;
@@ -315,6 +332,13 @@ export default function TripPlannerPage() {
     const interestedIds = new Set(result?.stayPreferences?.interestedApartmentIds || []);
     return (result?.apartments || []).filter((apartment) => interestedIds.has(apartment.id));
   }, [result]);
+
+  const chosenApartment = useMemo(
+    () => (result?.apartments || []).find(
+      (apartment) => apartment.id === result?.stayPreferences?.selectedApartmentId
+    ),
+    [result]
+  );
 
   const reviewedStayCount = useMemo(
     () => new Set([
@@ -433,6 +457,7 @@ export default function TripPlannerPage() {
     setPlanId(null);
     setLastRejectedApartmentId(null);
     setShowInterestedStays(false);
+    setShowStayComparison(false);
     inputRef.current?.focus();
   };
 
@@ -468,9 +493,15 @@ export default function TripPlannerPage() {
   const applyStayPreferenceResponse = (data: {
     stayPreferences: StayPreferences;
     itinerary?: PlannerResult['itinerary'];
+    activities?: ActivityCandidate[];
   }) => {
     setResult((current) => current
-      ? { ...current, stayPreferences: data.stayPreferences, itinerary: data.itinerary }
+      ? {
+          ...current,
+          stayPreferences: data.stayPreferences,
+          itinerary: data.itinerary,
+          activities: data.activities || current.activities,
+        }
       : current
     );
     setSavedPlans((current) => current.map((plan) =>
@@ -542,9 +573,26 @@ export default function TripPlannerPage() {
       applyStayPreferenceResponse(response.data.data);
       setLastRejectedApartmentId(null);
       setShowInterestedStays(false);
+      setShowStayComparison(false);
       toast.success('Stay choices reset');
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Unable to reset your choices');
+    } finally {
+      setStayDecisionLoading(false);
+    }
+  };
+
+  const chooseStay = async (apartment: ApartmentCandidate) => {
+    if (!planId || stayDecisionLoading) return;
+    setStayDecisionLoading(true);
+    try {
+      const response = await api.post(selectTripStay(planId), { apartmentId: apartment.id });
+      applyStayPreferenceResponse(response.data.data);
+      setShowStayComparison(false);
+      setShowInterestedStays(true);
+      toast.success(`${apartment.name} is now your primary stay`);
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Unable to choose this stay');
     } finally {
       setStayDecisionLoading(false);
     }
@@ -1110,13 +1158,30 @@ export default function TripPlannerPage() {
                 ) : result.apartments.length > 0 ? (
                   <div className="mt-4 rounded-2xl border border-[#e6dfca] bg-[linear-gradient(145deg,#fffdf6,#fff5d7)] p-5 text-center dark:border-[#403821] dark:bg-[linear-gradient(145deg,#202630,#2c2617)]">
                     <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-[#ffbf00] text-[#17191b]"><BookmarkCheck size={22} /></div>
-                    <h3 className="mt-3 text-base font-black text-[#17191b] dark:text-white">You’ve reviewed every stay</h3>
-                    <p className="mt-2 text-xs leading-5 text-[#737981] dark:text-[#b8bec7]">
-                      {interestedApartments.length
-                        ? `${interestedApartments.length} stay${interestedApartments.length === 1 ? ' is' : 's are'} waiting in your shortlist.`
-                        : 'None felt right yet. Reset your choices or ask the AI to adjust the search.'}
-                    </p>
-                    <button type="button" onClick={() => void resetStayChoices()} disabled={stayDecisionLoading} className="mt-4 inline-flex items-center gap-1.5 rounded-xl border border-[#e5d397] bg-white px-4 py-2.5 text-xs font-extrabold text-[#67500b] transition hover:border-[#d2ad34] disabled:opacity-50 dark:border-[#4c432b] dark:bg-[#181d25] dark:text-[#f0d47f]">
+                    <h3 className="mt-3 text-base font-black text-[#17191b] dark:text-white">{chosenApartment ? 'Your primary stay is set' : 'You’ve reviewed every stay'}</h3>
+                    {chosenApartment ? (
+                      <>
+                        <p className="mt-2 text-sm font-extrabold text-[#4d5157] dark:text-[#edf0f4]">{chosenApartment.name}</p>
+                        <p className="mt-1 text-xs text-[#737981] dark:text-[#b8bec7]">{chosenApartment.neighborhood || chosenApartment.city}, {chosenApartment.state} · {formatNaira(chosenApartment.pricePerNight)} / night</p>
+                        <button type="button" onClick={() => void sendMessage(`Build my itinerary around ${chosenApartment.name}`)} disabled={loading} className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-[#17191b] px-4 py-2.5 text-xs font-extrabold text-white transition hover:bg-[#303438] disabled:opacity-50 dark:bg-[#ffbf00] dark:text-[#17191b]">
+                          <Sparkles size={13} /> Build itinerary around this stay
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <p className="mt-2 text-xs leading-5 text-[#737981] dark:text-[#b8bec7]">
+                          {interestedApartments.length
+                            ? `${interestedApartments.length} stay${interestedApartments.length === 1 ? ' is' : 's are'} waiting in your shortlist.`
+                            : 'None felt right yet. Reset your choices or ask the AI to adjust the search.'}
+                        </p>
+                        {interestedApartments.length > 0 && (
+                          <button type="button" onClick={() => setShowStayComparison(true)} className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-[#17191b] px-4 py-2.5 text-xs font-extrabold text-white transition hover:bg-[#303438] dark:bg-[#ffbf00] dark:text-[#17191b]">
+                            Compare and choose <ArrowRight size={13} />
+                          </button>
+                        )}
+                      </>
+                    )}
+                    <button type="button" onClick={() => void resetStayChoices()} disabled={stayDecisionLoading} className="mt-3 inline-flex items-center gap-1.5 rounded-xl border border-[#e5d397] bg-white px-4 py-2.5 text-xs font-extrabold text-[#67500b] transition hover:border-[#d2ad34] disabled:opacity-50 dark:border-[#4c432b] dark:bg-[#181d25] dark:text-[#f0d47f]">
                       <RotateCcw size={13} /> Review again
                     </button>
                   </div>
@@ -1155,16 +1220,22 @@ export default function TripPlannerPage() {
                   </div>
                 )}
 
+                {interestedApartments.length > 0 && (
+                  <button type="button" onClick={() => setShowStayComparison(true)} className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-[#17191b] px-4 py-3 text-xs font-extrabold text-white transition hover:bg-[#303438] dark:bg-[#ffbf00] dark:text-[#17191b]">
+                    Compare {interestedApartments.length} interested stay{interestedApartments.length === 1 ? '' : 's'} <ArrowRight size={14} />
+                  </button>
+                )}
+
                 {showInterestedStays && (
                   <div className="mt-3 space-y-2 rounded-2xl border border-[#eceef1] bg-[#fafafa] p-3 dark:border-[#353c47] dark:bg-[#141922]">
                     {interestedApartments.length ? interestedApartments.map((apartment) => (
-                      <Link key={apartment.id} href={`/apartments/${apartment.id}`} className="flex items-center gap-3 rounded-xl bg-white p-2.5 transition hover:shadow-sm dark:bg-[#1c222c]">
+                      <Link key={apartment.id} href={`/apartments/${apartment.id}`} className={`flex items-center gap-3 rounded-xl border p-2.5 transition hover:shadow-sm ${chosenApartment?.id === apartment.id ? 'border-[#e3aa00] bg-[#fff8df] dark:border-[#7a5e0d] dark:bg-[#2b2618]' : 'border-transparent bg-white dark:bg-[#1c222c]'}`}>
                         <div className="relative h-12 w-14 shrink-0 overflow-hidden rounded-lg bg-[#eceef1] dark:bg-[#252c36]">
                           {apartment.image ? <Image src={apartment.image} alt="" fill unoptimized sizes="56px" className="object-cover" /> : <div className="grid h-full place-items-center text-[#a2a7ae]"><BedDouble size={16} /></div>}
                         </div>
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-xs font-extrabold text-[#25292d] dark:text-white">{apartment.name}</p>
-                          <p className="mt-0.5 text-[10px] font-semibold text-[#81868d]">{formatNaira(apartment.pricePerNight)} / night</p>
+                          <p className="mt-0.5 text-[10px] font-semibold text-[#81868d]">{formatNaira(apartment.pricePerNight)} / night{chosenApartment?.id === apartment.id ? ' · Primary stay' : ''}</p>
                         </div>
                         <ArrowRight size={13} className="text-[#9a9fa6]" />
                       </Link>
@@ -1410,6 +1481,70 @@ export default function TripPlannerPage() {
               </div>
             )}
           </section>
+        )}
+
+        {showStayComparison && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="stay-comparison-title"
+            className="fixed inset-0 z-[80] flex items-end justify-center bg-[#090b0f]/70 p-0 backdrop-blur-sm sm:items-center sm:p-6"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) setShowStayComparison(false);
+            }}
+          >
+            <div className="max-h-[92vh] w-full max-w-6xl overflow-y-auto rounded-t-[30px] border border-[#e4e6e9] bg-[#f7f8fa] shadow-2xl sm:rounded-[30px] dark:border-[#353c47] dark:bg-[#111720]">
+              <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-[#e4e6e9] bg-white/95 px-5 py-5 backdrop-blur sm:px-7 dark:border-[#353c47] dark:bg-[#1c222c]/95">
+                <div>
+                  <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[#9b7300] dark:text-[#ffbf00]">Your shortlist</p>
+                  <h2 id="stay-comparison-title" className="mt-1 font-display text-xl font-black text-[#17191b] sm:text-2xl dark:text-white">Compare and choose your stay</h2>
+                  <p className="mt-1 text-xs text-[#777e87] dark:text-[#b5bcc5]">Your final choice becomes the anchor for nearby activities and the itinerary.</p>
+                </div>
+                <button type="button" onClick={() => setShowStayComparison(false)} aria-label="Close stay comparison" className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-[#e2e4e7] bg-white text-[#686e76] transition hover:bg-[#f0f1f3] dark:border-[#3a424e] dark:bg-[#181d25] dark:text-[#d0d5dc]">
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="grid gap-4 p-4 sm:grid-cols-2 sm:p-6 lg:grid-cols-3">
+                {interestedApartments.map((apartment) => {
+                  const isChosen = chosenApartment?.id === apartment.id;
+                  return (
+                    <article key={apartment.id} className={`overflow-hidden rounded-[22px] border bg-white shadow-[0_12px_35px_rgba(31,35,41,0.06)] dark:bg-[#1c222c] ${isChosen ? 'border-[#e2a900] ring-2 ring-[#ffbf00]/25 dark:border-[#ffbf00]' : 'border-[#e2e4e7] dark:border-[#353c47]'}`}>
+                      <div className="relative h-44 bg-[#e9ebee] dark:bg-[#141922]">
+                        {apartment.image ? (
+                          <Image src={apartment.image} alt={apartment.name} fill unoptimized sizes="(max-width: 640px) 100vw, 360px" className="object-cover" />
+                        ) : (
+                          <div className="grid h-full place-items-center text-[#9da2aa]"><BedDouble size={30} /></div>
+                        )}
+                        {isChosen && <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-[#ffbf00] px-3 py-1.5 text-[10px] font-black text-[#17191b] shadow"><Check size={11} strokeWidth={3} /> Primary stay</span>}
+                      </div>
+                      <div className="p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <h3 className="line-clamp-2 text-sm font-black text-[#17191b] dark:text-white">{apartment.name}</h3>
+                            <p className="mt-1 flex items-start gap-1 text-[11px] leading-4 text-[#7c828a] dark:text-[#b4bbc5]"><MapPin size={11} className="mt-0.5 shrink-0" /> {apartment.neighborhood || apartment.city}, {apartment.state}</p>
+                          </div>
+                          <p className="shrink-0 text-right text-xs font-black text-[#17191b] dark:text-white">{formatNaira(apartment.pricePerNight)}<span className="block text-[9px] font-medium text-[#90959c]">per night</span></p>
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-1.5 text-[10px] font-bold text-[#646a72] dark:text-[#c1c7d0]">
+                          <span className="rounded-full bg-[#f3f4f5] px-2.5 py-1.5 dark:bg-[#252c36]">{apartment.bedrooms} bedroom{apartment.bedrooms === 1 ? '' : 's'}</span>
+                          <span className="rounded-full bg-[#f3f4f5] px-2.5 py-1.5 dark:bg-[#252c36]">Up to {apartment.guests} guests</span>
+                        </div>
+                        {apartment.amenities.length > 0 && <p className="mt-3 line-clamp-2 text-[10px] leading-5 text-[#858b93] dark:text-[#aeb5bf]">{apartment.amenities.slice(0, 4).join(' · ')}</p>}
+                        <div className="mt-4 grid grid-cols-2 gap-2">
+                          <Link href={`/apartments/${apartment.id}`} className="flex items-center justify-center rounded-xl border border-[#dfe1e5] px-3 py-2.5 text-[11px] font-extrabold text-[#555b62] transition hover:bg-[#f5f6f7] dark:border-[#3a424e] dark:text-[#c8ced7] dark:hover:bg-[#252c36]">View details</Link>
+                          <button type="button" onClick={() => void chooseStay(apartment)} disabled={stayDecisionLoading || isChosen} className="flex items-center justify-center gap-1 rounded-xl bg-[#ffbf00] px-3 py-2.5 text-[11px] font-extrabold text-[#17191b] transition hover:bg-[#eeb200] disabled:cursor-default disabled:bg-[#e8e1ca] disabled:text-[#8a8168] dark:disabled:bg-[#353126]">
+                            {stayDecisionLoading ? <Loader2 size={12} className="animate-spin" /> : isChosen ? <Check size={12} /> : null}
+                            {isChosen ? 'Chosen' : 'Choose stay'}
+                          </button>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
         )}
       </main>
     </AppShell>

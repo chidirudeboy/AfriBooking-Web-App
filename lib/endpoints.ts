@@ -110,6 +110,7 @@ export const deleteTripPlan = (planId: string) => endpoint2(`trip-planner/plans/
 export const setTripStayPreference = (planId: string) => endpoint2(`trip-planner/plans/${planId}/stay-preferences`);
 export const undoTripStayPreference = (planId: string) => endpoint2(`trip-planner/plans/${planId}/stay-preferences/last`);
 export const resetTripStayPreferences = (planId: string) => endpoint2(`trip-planner/plans/${planId}/stay-preferences`);
+export const selectTripStay = (planId: string) => endpoint2(`trip-planner/plans/${planId}/select-stay`);
 
 // Request endpoints
 export const createUserRequest = endpoint2("user/request/create");
