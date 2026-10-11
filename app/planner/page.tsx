@@ -495,6 +495,10 @@ export default function TripPlannerPage() {
 
   const activeActivityCategory = activityTaxonomy.find((category) => category.id === selectedActivityCategory);
   const visibleActivities = useMemo(() => result?.activities || [], [result?.activities]);
+  const activitiesById = useMemo(
+    () => new Map((result?.activities || []).map((activity) => [activity.id, activity])),
+    [result?.activities]
+  );
 
   const activitiesPerPage = 9;
   const activityPageCount = Math.max(1, Math.ceil(visibleActivities.length / activitiesPerPage));
@@ -1855,11 +1859,45 @@ export default function TripPlannerPage() {
                   </div>
                   <span className="rounded-full bg-white px-3 py-1.5 text-[10px] font-bold text-[#777e87] shadow-sm dark:bg-[#1c222c]">{selectedItineraryDay.activities.length} stops</span>
                 </div>
-                {selectedItineraryDay.activities.map((activity, index) => (
+                {selectedItineraryDay.activities.map((activity, index) => {
+                  const sourceActivity = activity.sourceActivityId
+                    ? activitiesById.get(activity.sourceActivityId)
+                    : undefined;
+                  const showPhoto = Boolean(
+                    sourceActivity?.hasPhoto && !failedActivityImages.has(sourceActivity.id)
+                  );
+                  return (
                   <article key={`${activity.title}-${index}`} className="relative grid grid-cols-[38px_minmax(0,1fr)] gap-3 pb-5 last:pb-0 sm:grid-cols-[52px_minmax(0,1fr)] sm:gap-4">
                     {index < selectedItineraryDay.activities.length - 1 && <div className="absolute bottom-0 left-[18px] top-10 w-0.5 bg-[#ece3c8] sm:left-[25px] dark:bg-[#3d392e]" />}
                     <div className="relative z-10 grid h-9 w-9 place-items-center rounded-full border-4 border-white bg-[#17191b] text-[11px] font-black text-white shadow-sm sm:h-12 sm:w-12 dark:border-[#1c222c] dark:bg-[#ffbf00] dark:text-[#17191b]">{index + 1}</div>
-                    <div className="rounded-2xl border border-[#e8e9ec] bg-white p-4 shadow-sm sm:p-5 dark:border-[#353c47] dark:bg-[#181d25]">
+                    <div className="overflow-hidden rounded-2xl border border-[#e8e9ec] bg-white shadow-sm dark:border-[#353c47] dark:bg-[#181d25]">
+                      {sourceActivity && (
+                        <div className="relative h-40 overflow-hidden bg-[#e9ebee] dark:bg-[#111720] sm:h-48">
+                          {showPhoto ? (
+                            <Image
+                              src={getPlacePhoto(sourceActivity.id)}
+                              alt={`${activity.title} from Google Maps`}
+                              fill
+                              unoptimized
+                              sizes="(max-width: 640px) calc(100vw - 90px), 800px"
+                              className="object-cover transition duration-500 hover:scale-[1.02]"
+                              onError={() => setFailedActivityImages((current) => new Set(current).add(sourceActivity.id))}
+                            />
+                          ) : (
+                            <ActivityArtwork type={sourceActivity.types[0] || activity.category} name={activity.title} className="h-full" />
+                          )}
+                          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/70 to-transparent" />
+                          <span className="absolute bottom-3 left-3 rounded-full bg-black/55 px-2.5 py-1 text-[9px] font-extrabold text-white backdrop-blur-sm">
+                            {sourceActivity.addedByUser ? 'Chosen by you' : 'Verified place'}
+                          </span>
+                          {showPhoto && sourceActivity.photoAttributions?.length ? (
+                            <p className="absolute bottom-3 right-3 max-w-[52%] truncate text-right text-[8px] font-semibold text-white/85">
+                              Photo: {sourceActivity.photoAttributions.map((attribution) => attribution.displayName).join(', ')}
+                            </p>
+                          ) : null}
+                        </div>
+                      )}
+                      <div className="p-4 sm:p-5">
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="flex flex-wrap items-center gap-2">
                           <label className="inline-flex items-center gap-1.5 rounded-lg bg-[#fff5ce] px-2.5 py-1.5 text-[10px] font-extrabold text-[#8a6500] dark:bg-[#302916] dark:text-[#ffbf00]">
@@ -1902,9 +1940,11 @@ export default function TripPlannerPage() {
                       {activity.estimatedCostPerPerson !== undefined && (
                         <p className="mt-4 text-xs font-extrabold text-[#17191b] dark:text-white">About {formatNaira(activity.estimatedCostPerPerson)} per person</p>
                       )}
+                      </div>
                     </div>
                   </article>
-                ))}
+                  );
+                })}
                 <a
                   href="#activity-recommendations"
                   className="ml-[51px] mt-2 inline-flex items-center gap-2 rounded-xl border border-dashed border-[#d8bd6d] bg-[#fffaf0] px-4 py-3 text-xs font-extrabold text-[#765800] transition hover:border-[#d09b00] hover:bg-[#fff4ce] sm:ml-[68px] dark:border-[#55491f] dark:bg-[#282317] dark:text-[#ffcf3f]"
@@ -2062,7 +2102,7 @@ function PlanningStatus({
   );
 }
 
-function ActivityArtwork({ type, name }: { type?: string; name: string }) {
+function ActivityArtwork({ type, name, className = 'h-32' }: { type?: string; name: string; className?: string }) {
   const normalized = String(type || '').toLowerCase();
   let Icon = Compass;
   let gradient = 'from-[#1d2732] via-[#314456] to-[#d09b00]';
@@ -2095,7 +2135,7 @@ function ActivityArtwork({ type, name }: { type?: string; name: string }) {
   }
 
   return (
-    <div className={`relative h-32 overflow-hidden bg-gradient-to-br ${gradient}`}>
+    <div className={`relative overflow-hidden bg-gradient-to-br ${gradient} ${className}`}>
       <div className="absolute -right-8 -top-12 h-36 w-36 rounded-full border-[22px] border-white/10" />
       <div className="absolute -bottom-16 left-6 h-32 w-32 rounded-full bg-black/15 blur-xl" />
       <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/35 to-transparent" />
