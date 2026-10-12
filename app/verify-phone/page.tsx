@@ -6,6 +6,7 @@ import { ArrowLeft, CheckCircle2, Phone } from 'lucide-react';
 import { requestPhoneVerification, verifyPhoneVerification } from '@/lib/endpoints';
 import api from '@/lib/utils/api';
 import toast from 'react-hot-toast';
+import { getErrorMessage } from '@/lib/utils/errors';
 
 function VerifyPhoneContent() {
   const params = useSearchParams();
@@ -23,7 +24,7 @@ function VerifyPhoneContent() {
     try {
       const { data } = await api.post(requestPhoneVerification, { phone, email });
       toast.success(data?.message || 'Verification code sent.');
-    } catch (error: any) { toast.error(error?.response?.data?.message || 'Unable to send the verification code.'); }
+    } catch (error: any) { toast.error(getErrorMessage(error, 'Unable to send the verification code.')); }
     finally { setResending(false); }
   }, [email, phone]);
 
@@ -41,7 +42,7 @@ function VerifyPhoneContent() {
       if (data?.success === false) throw new Error(data?.message || 'Verification failed.');
       toast.success('Phone number verified. Welcome to AfriBooking!');
       router.replace('/apartments');
-    } catch (error: any) { toast.error(error?.response?.data?.message || error?.message || 'Verification failed.'); }
+    } catch (error: any) { toast.error(getErrorMessage(error, 'Verification failed.')); }
     finally { setLoading(false); }
   };
 

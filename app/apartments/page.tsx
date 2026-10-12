@@ -1,13 +1,15 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import AppShell from '@/components/AppShell';
 import ApartmentCard from '@/components/ApartmentCard';
-import FilterModal, { FilterState } from '@/components/FilterModal';
+import dynamic from 'next/dynamic';
+import type { FilterState } from '@/components/FilterModal';
+const FilterModal = dynamic(() => import('@/components/FilterModal'), { ssr: false });
 import { TApartments, TOptionalFees } from '@/lib/types/airbnb';
 import { getEveryApartments } from '@/lib/endpoints';
 import { getPrice } from '@/lib/utils/price';
@@ -43,9 +45,15 @@ const browseCategories = [
   { name: 'Vacation Homes', image: 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=600&auto=format&fit=crop&q=80', filter: 'Vacation Home' },
 ];
 
+// Module-level cache: survives navigating to a listing and back, so the grid
+// (and its already-loaded images) doesn't get torn down and refetched.
+const APARTMENTS_CACHE_TTL = 5 * 60 * 1000;
+let apartmentsCache: { data: TApartments[]; at: number } | null = null;
+let cachedVisibleCount = 0;
+
 export default function ApartmentsPage() {
-  const [apartments, setApartments] = useState<TApartments[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [apartments, setApartments] = useState<TApartments[]>(() => apartmentsCache?.data ?? []);
+  const [loading, setLoading] = useState(() => !apartmentsCache);
   const [activeTab, setActiveTab] = useState<'Stays' | 'Spaces' | 'Experiences' | 'Transport'>('Stays');
   const [searchQuery, setSearchQuery] = useState('');
   const [destination, setDestination] = useState('All destinations');
@@ -64,17 +72,24 @@ export default function ApartmentsPage() {
     sortOrder: 'desc',
   });
 
+  // Progressive rendering: mount cards in batches as the user nears the end.
+  const PAGE_SIZE = 12;
+  const [visibleCount, setVisibleCount] = useState(() => cachedVisibleCount || PAGE_SIZE);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+
   const { user } = useAuth();
   const { favoriteIds, pendingIds, toggleFavorite } = useFavorites();
   const router = useRouter();
 
   useEffect(() => {
-    fetchApartments();
+    // Fresh cache: nothing to do. Stale cache: refresh silently in the background.
+    if (apartmentsCache && Date.now() - apartmentsCache.at < APARTMENTS_CACHE_TTL) return;
+    fetchApartments(!!apartmentsCache);
   }, []);
 
-  const fetchApartments = async () => {
+  const fetchApartments = async (background = false) => {
     try {
-      setLoading(true);
+      if (!background) setLoading(true);
 
       let authToken = null;
       if (typeof window !== 'undefined') {
@@ -108,6 +123,7 @@ export default function ApartmentsPage() {
       }
 
       if (results && results.length > 0) {
+        apartmentsCache = { data: results, at: Date.now() };
         setApartments(results);
       } else {
         toast.error('No apartments found');
@@ -120,7 +136,7 @@ export default function ApartmentsPage() {
       } else if (error.response?.data?.message) {
         errorMessage = error.response.data.message;
       }
-      toast.error(errorMessage);
+      if (!background) toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -291,6 +307,40 @@ export default function ApartmentsPage() {
 
   const hasActiveFilters =
     filters.state || filters.city || filters.numOfBeds || filters.priceRange || filters.sortBy;
+
+  // Reset the batch when filters/search change
+  const firstFilterRun = useRef(true);
+  useEffect(() => {
+    if (firstFilterRun.current) {
+      firstFilterRun.current = false;
+      return;
+    }
+    setVisibleCount(PAGE_SIZE);
+  }, [searchQuery, destination, reservationType, filters]);
+
+  useEffect(() => {
+    cachedVisibleCount = visibleCount;
+  }, [visibleCount]);
+
+  // Load the next batch when the sentinel nears the viewport
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el || visibleCount >= filteredApartments.length) return;
+    if (typeof IntersectionObserver === 'undefined') {
+      setVisibleCount(filteredApartments.length);
+      return;
+    }
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setVisibleCount((c) => c + PAGE_SIZE);
+        }
+      },
+      { rootMargin: '600px' }
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [visibleCount, filteredApartments.length]);
 
   return (
     <AppShell>
@@ -611,9 +661,10 @@ export default function ApartmentsPage() {
       {/* 9. Apartment Grid */}
       {!loading && filteredApartments.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
-          {filteredApartments.map((apartment) => (
+          {filteredApartments.slice(0, visibleCount).map((apartment, index) => (
             <ApartmentCard
               key={apartment._id}
+              priority={index < 3}
               apartment={apartment}
               reservationType={reservationType === 'all' ? 'normal' : reservationType}
               isFavorite={favoriteIds.has(apartment._id)}
@@ -622,6 +673,9 @@ export default function ApartmentsPage() {
             />
           ))}
         </div>
+      )}
+      {!loading && visibleCount < filteredApartments.length && (
+        <div ref={sentinelRef} aria-hidden className="h-10" />
       )}
 
       {/* Filter Modal */}

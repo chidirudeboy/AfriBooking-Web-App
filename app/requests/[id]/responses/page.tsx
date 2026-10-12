@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format, differenceInDays, differenceInHours, differenceInMinutes, parseISO } from 'date-fns';
+import { getErrorMessage } from '@/lib/utils/errors';
 
 interface ApartmentData {
   id?: string;
@@ -110,7 +111,7 @@ export default function RequestResponsesPage() {
     } catch (error: any) {
       console.error('Error fetching responses:', error);
       if (error.response?.status !== 404) {
-        toast.error('Failed to load responses');
+        toast.error(getErrorMessage(error, 'Failed to load responses'));
       }
     } finally {
       setLoading(false);
@@ -139,7 +140,7 @@ export default function RequestResponsesPage() {
       toast.success('Request deleted');
       router.push('/requests');
     } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Failed to delete request');
+      toast.error(getErrorMessage(error, 'Failed to delete request'));
     }
   };
 

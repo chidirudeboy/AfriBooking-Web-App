@@ -9,6 +9,7 @@ import axios from 'axios';
 import { Bell, Trash2, CheckCircle, X, Calendar, RefreshCw, Eye, EyeOff, Copy } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { safeFormat } from '@/lib/utils';
+import { getErrorMessage } from '@/lib/utils/errors';
 
 interface Notification {
   id?: string;
@@ -114,7 +115,7 @@ export default function NotificationsPage() {
       setNotifications(notificationsData);
     } catch (error: any) {
       console.error('Error fetching notifications:', error);
-      toast.error(error.response?.data?.message || 'Failed to load notifications');
+      toast.error(getErrorMessage(error, 'Failed to load notifications'));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -160,7 +161,7 @@ export default function NotificationsPage() {
       fetchNotifications();
     } catch (error: any) {
       console.error('Error marking notification as read:', error);
-      toast.error('Failed to mark notification as read');
+      toast.error(getErrorMessage(error, 'Failed to mark notification as read'));
     }
   };
 
@@ -217,11 +218,11 @@ export default function NotificationsPage() {
         toast.success('Notification deleted');
         setNotifications(prev => prev.filter(n => (n.id || n._id) !== notificationId));
       } else {
-        toast.error('Failed to delete notification');
+        toast.error('Failed to delete notification. Please try again.');
       }
     } catch (error: any) {
       console.error('Error deleting notification:', error);
-      toast.error('Failed to delete notification');
+      toast.error(getErrorMessage(error, 'Failed to delete notification'));
     }
   };
 
@@ -341,7 +342,7 @@ export default function NotificationsPage() {
                       router.push(bookingUrl);
                     } catch (error) {
                       console.error('❌ Error navigating to booking page:', error);
-                      toast.error('Failed to navigate to booking page. Please try again.');
+                      toast.error(getErrorMessage(error, 'Failed to navigate to booking page. Please try again.'));
                     }
                   } else {
                     console.log('⚠️ Notification not clickable:', {

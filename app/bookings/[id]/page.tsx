@@ -13,6 +13,7 @@ import toast from 'react-hot-toast';
 import { differenceInDays } from 'date-fns';
 import RatingStars from '@/components/RatingStars';
 import api from '@/lib/utils/api';
+import { getErrorMessage } from '@/lib/utils/errors';
 
 interface BookingDetails {
   _id: string;
@@ -159,7 +160,7 @@ export default function BookingDetailsPage() {
       }
     } catch (error: any) {
       console.error('Error fetching booking details:', error);
-      toast.error('Failed to load booking details');
+      toast.error(getErrorMessage(error, 'Failed to load booking details'));
       router.push('/bookings');
     } finally {
       setLoading(false);
@@ -190,7 +191,7 @@ export default function BookingDetailsPage() {
       setReviewOpen(false);
       toast.success('Thank you for reviewing your stay.');
     } catch (error: any) {
-      const message = error?.response?.data?.message || error?.message || 'Review could not be submitted.';
+      const message = getErrorMessage(error, 'Review could not be submitted.');
       if (/already exists/i.test(message)) setReviewSubmitted(true);
       toast.error(message);
     } finally { setReviewSubmitting(false); }
@@ -263,16 +264,16 @@ export default function BookingDetailsPage() {
             }
           } catch (createError: any) {
             console.error('Error creating chat:', createError);
-            toast.error(createError.response?.data?.message || 'Failed to create chat');
+            toast.error(getErrorMessage(createError, 'Failed to create chat'));
           }
         } else {
           console.error('Error fetching chat:', error);
-          toast.error('Failed to access chat');
+          toast.error(getErrorMessage(error, 'Failed to access chat'));
         }
       }
     } catch (error: any) {
       console.error('Error handling chat:', error);
-      toast.error('Failed to access chat');
+      toast.error(getErrorMessage(error, 'Failed to access chat'));
     }
   };
 

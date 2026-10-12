@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { TApartments } from '@/lib/types/airbnb';
@@ -14,16 +14,21 @@ interface ApartmentCardProps {
   isFavorite?: boolean;
   favoritePending?: boolean;
   onToggleFavorite?: (apartmentId: string) => void;
+  priority?: boolean;
 }
 
-export default function ApartmentCard({
+function ApartmentCard({
   apartment,
   reservationType = 'normal',
   isFavorite = false,
   favoritePending = false,
   onToggleFavorite,
+  priority = false,
 }: ApartmentCardProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const mediaRef = useRef<HTMLDivElement>(null);
+  // Only attach the video source once the card is near the viewport (saves mobile data).
+  const [videoNear, setVideoNear] = useState(false);
 
   // Get primary image
   const getPrimaryImage = () => {
@@ -74,6 +79,26 @@ export default function ApartmentCard({
   const rating = Number(apartment.averageRating || 0);
 
   // Property type badge label
+  useEffect(() => {
+    if (!primaryVideo || videoNear) return;
+    const el = mediaRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') {
+      setVideoNear(true);
+      return;
+    }
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setVideoNear(true);
+          io.disconnect();
+        }
+      },
+      { rootMargin: '200px' }
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [primaryVideo, videoNear]);
+
   const typeBadge =
     (apartment as any).propertyType ||
     (apartment.bedrooms >= 4 ? 'Entire Home' : apartment.bedrooms >= 2 ? 'Apartments' : 'Studio');
@@ -87,19 +112,19 @@ export default function ApartmentCard({
       : 'Stay';
 
   return (
-    <article className="group relative bg-white dark:bg-[#1c222c] rounded-2xl border border-[#e7e8eb] dark:border-[#353c47] overflow-hidden hover:shadow-lg transition-all duration-300">
+    <article style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 460px' }} className="group relative bg-white dark:bg-[#1c222c] rounded-2xl border border-[#e7e8eb] dark:border-[#353c47] overflow-hidden hover:shadow-lg transition-all duration-300">
       {/* Photo / Media Container */}
-      <div className="relative w-full h-[235px] sm:h-[240px] overflow-hidden bg-gray-100 dark:bg-gray-800">
+      <div ref={mediaRef} className="relative w-full h-[235px] sm:h-[240px] overflow-hidden bg-gray-100 dark:bg-gray-800">
         <Link href={`/apartments/${apartment._id}`} className="block w-full h-full">
           {primaryVideo ? (
             <>
               <video
                 ref={videoRef}
-                src={primaryVideo}
+                src={videoNear ? primaryVideo : undefined}
                 muted
                 playsInline
-                preload="metadata"
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                preload={videoNear ? 'metadata' : 'none'}
+                className="w-full h-full object-cover [@media(hover:hover)]:group-hover:scale-105 transition-transform duration-500"
                 onLoadedMetadata={() => {
                   if (videoRef.current) videoRef.current.currentTime = 1;
                 }}
@@ -118,8 +143,10 @@ export default function ApartmentCard({
               src={imageUrl}
               alt={apartment.apartmentName}
               fill
-              className="object-cover group-hover:scale-105 transition-transform duration-500"
-              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+              priority={priority}
+              quality={70}
+              className="object-cover [@media(hover:hover)]:group-hover:scale-105 transition-transform duration-500"
+              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
             />
           )}
         </Link>
@@ -222,3 +249,5 @@ export default function ApartmentCard({
     </article>
   );
 }
+
+export default memo(ApartmentCard);

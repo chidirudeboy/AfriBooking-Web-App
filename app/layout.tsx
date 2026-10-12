@@ -6,10 +6,14 @@ import { ThemeWrapper } from '@/components/ThemeWrapper'
 import SessionWarning from '@/components/SessionWarning'
 import AppUpdateBanner from '@/components/AppUpdateBanner'
 import { Toaster } from 'react-hot-toast'
+import { DM_Sans, Manrope } from 'next/font/google'
 import { GoogleTagManagerHead, GoogleTagManagerBody } from '@/components/GoogleTagManager'
 import Analytics from '@/components/Analytics'
 import OnboardingExperience from '@/components/OnboardingExperience'
 import BrowserNotificationBridge from '@/components/BrowserNotificationBridge'
+
+const dmSans = DM_Sans({ subsets: ['latin'], weight: ['400', '500', '600', '700'], display: 'swap', variable: '--font-dm-sans' })
+const manrope = Manrope({ subsets: ['latin'], weight: ['400', '500', '600', '700', '800'], display: 'swap', variable: '--font-manrope' })
 
 export const metadata: Metadata = {
   title: 'AfriBooking — Discover your next destination',
@@ -32,15 +36,8 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning className={`${dmSans.variable} ${manrope.variable}`}>
       <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        {/* eslint-disable-next-line @next/next/no-page-custom-font */}
-        <link
-          rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
-        />
         <GoogleTagManagerHead />
       </head>
       <body className="font-sans bg-white dark:bg-[#141922] text-[#17191b] dark:text-[#f0f2f6] min-h-screen antialiased">

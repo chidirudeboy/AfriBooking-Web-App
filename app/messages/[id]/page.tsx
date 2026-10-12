@@ -11,6 +11,7 @@ import axios from 'axios';
 import { ArrowLeft, Send, RefreshCw, MessageSquare } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format, formatDistanceToNow } from 'date-fns';
+import { getErrorMessage } from '@/lib/utils/errors';
 
 interface Message {
   _id: string;
@@ -214,7 +215,7 @@ export default function ChatDetailPage() {
       setPage(pageNum);
     } catch (error: any) {
       console.error('Error fetching messages:', error);
-      toast.error(error.response?.data?.message || 'Failed to load messages');
+      toast.error(getErrorMessage(error, 'Failed to load messages'));
     } finally {
       setLoading(false);
     }
@@ -382,7 +383,7 @@ export default function ChatDetailPage() {
       }
     } catch (error: any) {
       console.error('Error sending message:', error);
-      toast.error(error.response?.data?.message || 'Failed to send message');
+      toast.error(getErrorMessage(error, 'Failed to send message'));
       setMessageText(textToSend); // Restore message text on error
     } finally {
       setSending(false);

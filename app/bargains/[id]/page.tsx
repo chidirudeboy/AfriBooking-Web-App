@@ -9,6 +9,7 @@ import { cancelBargain, getBargainById, payForBargain, respondToBargain } from '
 import api from '@/lib/utils/api';
 import { bargainStatus, formatDateRange, formatNaira, reservationLabel } from '@/lib/utils/bargain';
 import toast from 'react-hot-toast';
+import { getErrorMessage } from '@/lib/utils/errors';
 
 const ID_OPTIONS = ["Driver's License", "Voter's ID", 'National Passport', 'National ID'];
 
@@ -37,7 +38,7 @@ export default function BargainDetailsPage() {
       if (booking?.meansOfIdentification) setIdType(booking.meansOfIdentification);
       if (booking?.identificationNumber) setIdNumber(booking.identificationNumber);
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Unable to load this offer.');
+      toast.error(getErrorMessage(error, 'Unable to load this offer.'));
     } finally {
       setLoading(false);
     }
@@ -61,7 +62,7 @@ export default function BargainDetailsPage() {
       setCounterMessage('');
       load();
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Unable to send your counteroffer.');
+      toast.error(getErrorMessage(error, 'Unable to send your counteroffer.'));
     } finally { setWorking(false); }
   };
 
@@ -72,7 +73,7 @@ export default function BargainDetailsPage() {
       await api.post(cancelBargain(id), {});
       toast.success('Offer cancelled.');
       load();
-    } catch (error: any) { toast.error(error?.response?.data?.message || 'Unable to cancel this offer.'); }
+    } catch (error: any) { toast.error(getErrorMessage(error, 'Unable to cancel this offer.')); }
     finally { setWorking(false); }
   };
 
@@ -92,7 +93,7 @@ export default function BargainDetailsPage() {
       const url = data?.data?.payment?.data?.authorization_url || data?.data?.payment?.authorization_url || data?.data?.payment?.authorizationUrl;
       if (!url) throw new Error(data?.message || 'Payment link unavailable.');
       window.location.assign(url);
-    } catch (error: any) { toast.error(error?.response?.data?.message || error?.message || 'Unable to start payment.'); }
+    } catch (error: any) { toast.error(getErrorMessage(error, 'Unable to start payment.')); }
     finally { setWorking(false); }
   };
 

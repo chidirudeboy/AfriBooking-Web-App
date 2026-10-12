@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { getErrorMessage } from '@/lib/utils/errors';
 import { useRouter } from 'next/navigation';
 import api from '@/lib/utils/api';
 import { loginUser as loginEndpoint, userProfile, createAccount, updateProfile, deleteAccount, forgotPassword, resetPassword, requestEmailVerification } from '@/lib/endpoints';
@@ -258,30 +259,55 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setLoading(false);
       console.error('Login Error:', error);
 
-      let errorMessage = 'An error occurred during login';
-      const errors = error.response?.data?.errors;
-      const serverMessage = error.response?.data?.message;
-      const serverError = error.response?.data?.error;
+      const status = error.response?.status;
+      const data = error.response?.data;
+      const errors = data?.errors;
+      const asText = (v: unknown): string => (typeof v === 'string' ? v : '');
+      const serverMessage = asText(data?.message) || asText(data?.error);
+      const lower = serverMessage.toLowerCase();
 
-      if (error.response?.status === 400) {
-        if (serverError === 'Failed to login, user not registered' || serverMessage?.includes('not registered')) {
-          errorMessage = 'This email is not registered. Please create an account or check your email address.';
-        } else if (serverMessage?.includes('password')) {
-          errorMessage = 'Incorrect password. Please try again.';
-        } else {
-          errorMessage = serverMessage || serverError || 'Invalid login credentials. Please check your email and password.';
-        }
-      } else if (error.response?.status === 404) {
+      let errorMessage = 'Something went wrong while signing in. Please try again.';
+
+      if (!error.response) {
+        errorMessage = error.code === 'ECONNABORTED'
+          ? 'The request timed out. Please check your connection and try again.'
+          : 'Unable to reach the server. Please check your internet connection and try again.';
+      } else if (lower.includes('not registered') || lower.includes('not found') || lower.includes('no account') || lower.includes('does not exist')) {
+        errorMessage = 'No account found with this email. Please check the email or create an account.';
+      } else if (lower.includes('wrong credentials') || lower.includes('password')) {
+        errorMessage = 'Incorrect password. Please try again or reset your password.';
+      } else if (lower.includes('suspended')) {
+        errorMessage = 'Your account has been suspended. Please contact support for assistance.';
+      } else if (lower.includes('banned')) {
+        errorMessage = 'Your account has been banned. Please contact support.';
+      } else if (lower.includes('restricted')) {
+        errorMessage = 'Your account access is restricted. Please contact support.';
+      } else if (lower.includes('valid email')) {
+        errorMessage = 'Please enter a valid email address.';
+      } else if (lower.includes('is required') || lower.includes('not allowed to be empty')) {
+        errorMessage = 'Please enter both your email and password.';
+      } else if (lower.includes('too many')) {
+        errorMessage = serverMessage;
+      } else if (lower.includes('verify') || lower.includes('not verified')) {
+        errorMessage = serverMessage;
+      } else if (status === 404) {
         errorMessage = 'Account not found. Please check your email or create a new account.';
-      } else if (error.response?.status === 401) {
-        errorMessage = 'Invalid email or password. Please try again.';
-      } else if (serverMessage || serverError) {
-        errorMessage = serverMessage || serverError;
+      } else if (status === 401 || status === 400) {
+        errorMessage = serverMessage || 'Incorrect email or password. Please check your details and try again.';
+      } else if (status === 403) {
+        errorMessage = serverMessage || 'Your account does not have access. Please contact support.';
+      } else if (status === 429) {
+        errorMessage = 'Too many login attempts. Please wait a moment and try again.';
+      } else if (status >= 500) {
+        errorMessage = 'Our server is having trouble right now. Please try again shortly.';
+      } else if (serverMessage) {
+        errorMessage = serverMessage;
       }
 
-      if (errors) {
-        const key = Object.keys(errors)[0];
-        errorMessage = errors[key][0];
+      if (errors && typeof errors === 'object') {
+        const first = (Object.values(errors) as any[])[0];
+        const msg = Array.isArray(first) ? first[0] : first;
+        if (typeof msg === 'string' && msg) errorMessage = msg;
       }
 
       setError(errorMessage);
@@ -348,17 +374,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setLoading(false);
       console.error('Registration Error:', error);
 
-      const errorMessage = error.response?.data?.error || 'An error occurred during registration';
-      const errors = error.response?.data?.errors;
-
-      if (errors) {
-        const key = Object.keys(errors)[0];
-        setError(errors[key][0]);
-        toast.error(errors[key][0]);
+      const status = error.response?.status;
+      const lower = String(error.response?.data?.error || error.response?.data?.message || '').toLowerCase();
+      let errorMessage: string;
+      if (lower.includes('already exists')) {
+        errorMessage = 'An account with this email or phone number already exists. Please log in or use different details.';
+      } else if (lower.includes('required fields')) {
+        errorMessage = 'Please fill in all required fields (first name, last name, email, phone number and password).';
+      } else if (status === 429) {
+        errorMessage = 'Too many sign-up attempts. Please wait a moment and try again.';
       } else {
-        setError(errorMessage);
-        toast.error(errorMessage);
+        errorMessage = getErrorMessage(error, 'We could not create your account. Please try again.');
       }
+      setError(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -403,19 +432,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setLoading(false);
       console.error('Update Profile Error:', error);
 
-      const errorMessage = error.response?.data?.message || 
-                          error.response?.data?.error || 
-                          'An error occurred while updating your profile';
-      const errors = error.response?.data?.errors;
-
-      if (errors) {
-        const key = Object.keys(errors)[0];
-        setError(errors[key][0]);
-        toast.error(errors[key][0]);
-      } else {
-        setError(errorMessage);
-        toast.error(errorMessage);
-      }
+      const errorMessage = getErrorMessage(error, 'We could not update your profile. Please try again.');
+      setError(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -453,15 +472,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setLoading(false);
       console.error('Delete Account Error:', error);
 
-      let errorMessage = 'Failed to delete account';
-      
-      if (error.response?.status === 401) {
-        errorMessage = 'Invalid password. Please try again.';
-      } else if (error.response?.data?.message) {
-        errorMessage = error.response.data.message;
-      } else if (error.message) {
-        errorMessage = error.message;
-      }
+      const errorMessage = error.response?.status === 401
+        ? 'Invalid password. Please try again.'
+        : getErrorMessage(error, 'We could not delete your account. Please try again.');
 
       setError(errorMessage);
       toast.error(errorMessage);
@@ -540,7 +553,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } catch (error: any) {
       console.error('Reset Password Error:', error);
       
-      const errorMessage = error.response?.data?.message || error.message || 'Failed to reset password';
+      const errorMessage = getErrorMessage(error, 'We could not reset your password. Please try again.');
       setError(errorMessage);
       toast.error(errorMessage);
       return false;
