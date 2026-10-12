@@ -6,6 +6,8 @@ import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { Eye, EyeOff, ArrowLeft } from 'lucide-react';
 import { isEmpty } from '@/lib/utils';
+import { getPasswordError } from '@/lib/utils/password';
+import PasswordRequirements from '@/components/PasswordRequirements';
 import toast from 'react-hot-toast';
 
 function ResetPasswordForm() {
@@ -37,15 +39,9 @@ function ResetPasswordForm() {
       return false;
     }
 
-    if (newPassword.length < 8) {
-      toast.error('Password must be at least 8 characters');
-      return false;
-    }
-
-    // Validate password complexity (matching mobile app)
-    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
-    if (!passwordRegex.test(newPassword)) {
-      toast.error('Password must contain at least 8 characters, one uppercase letter, one lowercase letter, one digit, and one special character.');
+    const passwordError = getPasswordError(newPassword);
+    if (passwordError) {
+      toast.error(passwordError);
       return false;
     }
 
@@ -165,9 +161,7 @@ function ResetPasswordForm() {
             </div>
           </div>
 
-          <div className="text-sm text-gray-600">
-            <p>Password should contain: uppercase, lowercase, number, special character (e.g., Aa1%)</p>
-          </div>
+          <PasswordRequirements password={newPassword} confirmPassword={confirmNewPassword} />
 
           <button
             type="submit"

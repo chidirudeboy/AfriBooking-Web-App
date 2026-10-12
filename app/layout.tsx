@@ -6,14 +6,15 @@ import { ThemeWrapper } from '@/components/ThemeWrapper'
 import SessionWarning from '@/components/SessionWarning'
 import AppUpdateBanner from '@/components/AppUpdateBanner'
 import { Toaster } from 'react-hot-toast'
-import { DM_Sans, Manrope } from 'next/font/google'
+import localFont from 'next/font/local'
 import { GoogleTagManagerHead, GoogleTagManagerBody } from '@/components/GoogleTagManager'
 import Analytics from '@/components/Analytics'
 import OnboardingExperience from '@/components/OnboardingExperience'
 import BrowserNotificationBridge from '@/components/BrowserNotificationBridge'
 
-const dmSans = DM_Sans({ subsets: ['latin'], weight: ['400', '500', '600', '700'], display: 'swap', variable: '--font-dm-sans' })
-const manrope = Manrope({ subsets: ['latin'], weight: ['400', '500', '600', '700', '800'], display: 'swap', variable: '--font-manrope' })
+// Self-hosted variable fonts (OFL) so builds never depend on Google Fonts being reachable.
+const dmSans = localFont({ src: './fonts/dm-sans-latin-wght-normal.woff2', weight: '100 1000', display: 'swap', variable: '--font-dm-sans' })
+const manrope = localFont({ src: './fonts/manrope-latin-wght-normal.woff2', weight: '200 800', display: 'swap', variable: '--font-manrope' })
 
 export const metadata: Metadata = {
   title: 'AfriBooking — Discover your next destination',
