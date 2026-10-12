@@ -18,11 +18,13 @@ import {
   ChevronUp,
   Clock3,
   Compass,
+  Copy,
   ExternalLink,
   Globe2,
   Loader2,
   MapPin,
   Moon,
+  MoveRight,
   Pencil,
   Phone,
   Plus,
@@ -394,6 +396,11 @@ export default function TripPlannerPage() {
   const [editingPlanTitle, setEditingPlanTitle] = useState(false);
   const [planTitleDraft, setPlanTitleDraft] = useState('');
   const [savingPlanTitle, setSavingPlanTitle] = useState(false);
+  const [activityTransfer, setActivityTransfer] = useState<{
+    sourceDay: number;
+    activityIndex: number;
+    mode: 'move' | 'copy';
+  } | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const activityLocationInputRef = useRef<HTMLInputElement>(null);
   const deleteCancelButtonRef = useRef<HTMLButtonElement>(null);
@@ -448,6 +455,20 @@ export default function TripPlannerPage() {
     };
   }, [deletingPlan, planPendingDeletion]);
 
+  useEffect(() => {
+    if (!activityTransfer) return;
+    const previousOverflow = document.body.style.overflow;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !savingPlan) setActivityTransfer(null);
+    };
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [activityTransfer, savingPlan]);
+
   const suggestions = useMemo(() => {
     if (!result) return starterPrompts;
     const firstMissing = result.intent.missingFields?.[0];
@@ -496,6 +517,13 @@ export default function TripPlannerPage() {
 
   const selectedItineraryDay =
     result?.itinerary?.days?.find((day) => day.day === selectedDay) || result?.itinerary?.days?.[0];
+
+  const activityBeingTransferred = useMemo(() => {
+    if (!activityTransfer || !result?.itinerary) return undefined;
+    return result.itinerary.days
+      .find((day) => day.day === activityTransfer.sourceDay)
+      ?.activities[activityTransfer.activityIndex];
+  }, [activityTransfer, result?.itinerary]);
 
   const activeActivityCategory = activityTaxonomy.find((category) => category.id === selectedActivityCategory);
   const visibleActivities = useMemo(() => result?.activities || [], [result?.activities]);
@@ -615,6 +643,7 @@ export default function TripPlannerPage() {
     setShowStayComparison(false);
     setEditingPlanTitle(false);
     setPlanTitleDraft('');
+    setActivityTransfer(null);
     setStaySkipped(false);
     setLocationQuery('');
     setLocationPredictions([]);
@@ -628,6 +657,7 @@ export default function TripPlannerPage() {
       const plan = response.data?.data?.plan as SavedPlan;
       setEditingPlanTitle(false);
       setPlanTitleDraft('');
+      setActivityTransfer(null);
       setPlanId(plan._id);
       setMessages(plan.conversation?.length ? plan.conversation : [initialMessage]);
       setResult(normalizePlannerResult({
@@ -908,7 +938,7 @@ export default function TripPlannerPage() {
     itinerary: PlannerResult['itinerary'],
     status: 'draft' | 'saved' = result?.planStatus || 'draft'
   ) => {
-    if (!planId || !result) return;
+    if (!planId || !result) return false;
     setSavingPlan(true);
     try {
       await api.patch(updateTripPlan(planId), { itinerary, intent: result.intent, status });
@@ -919,8 +949,10 @@ export default function TripPlannerPage() {
         )
       );
       if (status === 'saved') toast.success('Trip saved to your account');
+      return true;
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Unable to save trip changes');
+      return false;
     } finally {
       setSavingPlan(false);
     }
@@ -1066,6 +1098,62 @@ export default function TripPlannerPage() {
       ),
     };
     await persistPlan(itinerary);
+  };
+
+  const transferActivityToDay = async (targetDayNumber: number, createDay = false) => {
+    if (!result?.itinerary || !activityTransfer || savingPlan) return;
+    const sourceDay = result.itinerary.days.find((day) => day.day === activityTransfer.sourceDay);
+    const activity = sourceDay?.activities[activityTransfer.activityIndex];
+    if (!sourceDay || !activity || targetDayNumber === sourceDay.day) return;
+
+    const existingTarget = result.itinerary.days.find((day) => day.day === targetDayNumber);
+    if (!createDay && !existingTarget) return;
+    if ((existingTarget?.activities.length || 0) >= 20) {
+      toast.error(`Day ${targetDayNumber} already has the maximum of 20 activities`);
+      return;
+    }
+    const alreadyExists = existingTarget?.activities.some((item) =>
+      activity.sourceActivityId
+        ? item.sourceActivityId === activity.sourceActivityId
+        : item.title === activity.title && item.location === activity.location
+    );
+    if (alreadyExists) {
+      toast(`“${activity.title}” is already on Day ${targetDayNumber}`);
+      return;
+    }
+
+    const transferredActivity = activityTransfer.mode === 'copy'
+      ? { ...activity, time: 'Flexible' }
+      : activity;
+    let days = result.itinerary.days.map((day) => {
+      if (day.day === sourceDay.day && activityTransfer.mode === 'move') {
+        return {
+          ...day,
+          activities: day.activities.filter((_, index) => index !== activityTransfer.activityIndex),
+        };
+      }
+      if (day.day === targetDayNumber) {
+        return { ...day, activities: [...day.activities, transferredActivity] };
+      }
+      return day;
+    });
+
+    if (createDay) {
+      days = [...days, {
+        day: targetDayNumber,
+        title: `Day ${targetDayNumber}`,
+        activities: [transferredActivity],
+      }].sort((first, second) => first.day - second.day);
+    }
+
+    const mode = activityTransfer.mode;
+    const itinerary = { ...result.itinerary, days };
+    const saved = await persistPlan(itinerary);
+    if (saved) {
+      setSelectedDay(targetDayNumber);
+      setActivityTransfer(null);
+      toast.success(`${mode === 'move' ? 'Moved' : 'Copied'} to Day ${targetDayNumber}`);
+    }
   };
 
   const sharePlan = async () => {
@@ -2032,6 +2120,24 @@ export default function TripPlannerPage() {
                       {activity.estimatedCostPerPerson !== undefined && (
                         <p className="mt-4 text-xs font-extrabold text-[#17191b] dark:text-white">About {formatNaira(activity.estimatedCostPerPerson)} per person</p>
                       )}
+                      <div className="mt-4 flex flex-wrap gap-2 border-t border-[#eceef1] pt-4 dark:border-[#303844]">
+                        <button
+                          type="button"
+                          disabled={savingPlan}
+                          onClick={() => setActivityTransfer({ sourceDay: selectedItineraryDay.day, activityIndex: index, mode: 'move' })}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-[#dfe2e6] px-3 py-2 text-[11px] font-extrabold text-[#555c64] transition hover:border-[#d0a00c] hover:bg-[#fffaf0] disabled:opacity-40 dark:border-[#3a424e] dark:text-[#c8ced7] dark:hover:border-[#6b581c] dark:hover:bg-[#282317]"
+                        >
+                          <MoveRight size={14} /> Move to day
+                        </button>
+                        <button
+                          type="button"
+                          disabled={savingPlan}
+                          onClick={() => setActivityTransfer({ sourceDay: selectedItineraryDay.day, activityIndex: index, mode: 'copy' })}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-[#dfe2e6] px-3 py-2 text-[11px] font-extrabold text-[#555c64] transition hover:border-[#d0a00c] hover:bg-[#fffaf0] disabled:opacity-40 dark:border-[#3a424e] dark:text-[#c8ced7] dark:hover:border-[#6b581c] dark:hover:bg-[#282317]"
+                        >
+                          <Copy size={14} /> Copy to day
+                        </button>
+                      </div>
                       </div>
                     </div>
                   </article>
@@ -2046,6 +2152,108 @@ export default function TripPlannerPage() {
               </div>
             )}
           </section>
+        )}
+
+        {activityTransfer && activityBeingTransferred && result?.itinerary && (
+          <div
+            role="presentation"
+            className="fixed inset-0 z-[90] flex items-end justify-center bg-[#090d13]/75 p-0 backdrop-blur-sm sm:items-center sm:p-5"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget && !savingPlan) setActivityTransfer(null);
+            }}
+          >
+            <section
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="activity-transfer-title"
+              className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-[28px] border border-[#e4e7eb] bg-white p-5 shadow-2xl sm:rounded-[28px] sm:p-7 dark:border-[#353e4a] dark:bg-[#1b222c]"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[#987000] dark:text-[#ffbf00]">Organize your itinerary</p>
+                  <h2 id="activity-transfer-title" className="mt-1 text-xl font-black text-[#17191b] dark:text-white">
+                    {activityTransfer.mode === 'move' ? 'Move activity' : 'Copy activity'}
+                  </h2>
+                  <p className="mt-2 text-sm leading-5 text-[#737a82] dark:text-[#b7bec8]">
+                    Choose where <span className="font-extrabold text-[#34393f] dark:text-white">{activityBeingTransferred.title}</span> should go.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={savingPlan}
+                  onClick={() => setActivityTransfer(null)}
+                  aria-label="Close activity organizer"
+                  className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-[#707780] transition hover:bg-[#f1f3f5] disabled:opacity-40 dark:hover:bg-[#29323d]"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="mt-5 grid grid-cols-2 rounded-2xl bg-[#f3f4f6] p-1 dark:bg-[#121821]">
+                {(['move', 'copy'] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    disabled={savingPlan}
+                    onClick={() => setActivityTransfer((current) => current ? { ...current, mode } : current)}
+                    className={`flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-extrabold capitalize transition ${activityTransfer.mode === mode ? 'bg-white text-[#17191b] shadow-sm dark:bg-[#29313c] dark:text-white' : 'text-[#777e87] hover:text-[#34393f] dark:hover:text-white'}`}
+                  >
+                    {mode === 'move' ? <MoveRight size={15} /> : <Copy size={14} />}{mode}
+                  </button>
+                ))}
+              </div>
+
+              {activityTransfer.mode === 'copy' && (
+                <p className="mt-3 rounded-xl bg-[#fff8df] px-3 py-2.5 text-[11px] leading-5 text-[#80651b] dark:bg-[#2d281a] dark:text-[#e7ce81]">
+                  The copy will use a flexible time so it does not conflict with the original.
+                </p>
+              )}
+
+              <div className="mt-5 space-y-2">
+                {result.itinerary.days.map((day) => {
+                  const isCurrent = day.day === activityTransfer.sourceDay;
+                  const hasDuplicate = day.activities.some((item) =>
+                    activityBeingTransferred.sourceActivityId
+                      ? item.sourceActivityId === activityBeingTransferred.sourceActivityId
+                      : item.title === activityBeingTransferred.title && item.location === activityBeingTransferred.location
+                  );
+                  const disabled = isCurrent || hasDuplicate || day.activities.length >= 20 || savingPlan;
+                  return (
+                    <button
+                      key={day.day}
+                      type="button"
+                      disabled={disabled}
+                      onClick={() => void transferActivityToDay(day.day)}
+                      className="flex w-full items-center justify-between gap-4 rounded-2xl border border-[#e1e4e8] px-4 py-3.5 text-left transition hover:border-[#d5a10a] hover:bg-[#fffaf0] disabled:cursor-not-allowed disabled:opacity-55 dark:border-[#38414d] dark:hover:border-[#6d591b] dark:hover:bg-[#282317]"
+                    >
+                      <span>
+                        <span className="block text-sm font-black text-[#252a30] dark:text-white">Day {day.day}</span>
+                        <span className="mt-0.5 block text-[11px] text-[#858b93]">{day.title} · {day.activities.length} {day.activities.length === 1 ? 'stop' : 'stops'}</span>
+                      </span>
+                      <span className="shrink-0 rounded-full bg-[#f2f3f5] px-2.5 py-1 text-[9px] font-extrabold text-[#737980] dark:bg-[#29313c] dark:text-[#c1c7d0]">
+                        {isCurrent ? 'Current day' : hasDuplicate ? 'Already added' : day.activities.length >= 20 ? 'Full' : activityTransfer.mode === 'move' ? 'Move here' : 'Copy here'}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {result.itinerary.days.length < 14 && (() => {
+                const nextDayNumber = Math.max(...result.itinerary.days.map((day) => day.day), 0) + 1;
+                return (
+                  <button
+                    type="button"
+                    disabled={savingPlan}
+                    onClick={() => void transferActivityToDay(nextDayNumber, true)}
+                    className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-[#d6b34f] bg-[#fffaf0] px-4 py-3.5 text-xs font-extrabold text-[#795b00] transition hover:border-[#c99700] hover:bg-[#fff3c8] disabled:opacity-50 dark:border-[#5c4c20] dark:bg-[#282317] dark:text-[#ffcf3f]"
+                  >
+                    {savingPlan ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />}
+                    Create Day {nextDayNumber} and {activityTransfer.mode}
+                  </button>
+                );
+              })()}
+            </section>
+          </div>
         )}
 
         {showStayComparison && (
