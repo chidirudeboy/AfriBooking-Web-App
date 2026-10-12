@@ -10,6 +10,7 @@ import { MessageSquare, RefreshCw, Send, ArrowLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format, formatDistanceToNow } from 'date-fns';
 import { safeFormat } from '@/lib/utils';
+import { getErrorMessage } from '@/lib/utils/errors';
 
 interface Chat {
   _id: string;
@@ -130,7 +131,7 @@ export default function MessagesPage() {
     } catch (error: any) {
       console.error('Error fetching chats:', error);
       if (showLoading) {
-        toast.error(error.response?.data?.message || 'Failed to load messages');
+        toast.error(getErrorMessage(error, 'Failed to load messages'));
       }
     } finally {
       if (showLoading) {

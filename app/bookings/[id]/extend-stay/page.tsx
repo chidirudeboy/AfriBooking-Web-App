@@ -31,6 +31,7 @@ import {
   startOfWeek,
 } from 'date-fns';
 import { ArrowLeft, Calendar, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import { getErrorMessage } from '@/lib/utils/errors';
 
 interface BookingDetails {
   _id: string;
@@ -186,7 +187,7 @@ export default function ExtendStayPage() {
       }
     } catch (error) {
       console.error('Error fetching booking details:', error);
-      toast.error('Failed to load booking details');
+      toast.error(getErrorMessage(error, 'Failed to load booking details'));
       router.push('/bookings');
     } finally {
       setLoading(false);
@@ -289,7 +290,7 @@ export default function ExtendStayPage() {
         toast.error(response.data?.message || 'Failed to get extension preview.');
       }
     } catch (error: any) {
-      const message = error?.response?.data?.message || 'Failed to get extension preview.';
+      const message = getErrorMessage(error, 'Failed to get extension preview.');
       toast.error(message);
     } finally {
       setPreviewLoading(false);
@@ -328,7 +329,7 @@ export default function ExtendStayPage() {
         toast.error(response.data?.message || 'Failed to request extension.');
       }
     } catch (error: any) {
-      const message = error?.response?.data?.message || 'Failed to request extension.';
+      const message = getErrorMessage(error, 'Failed to request extension.');
       toast.error(message);
     }
   };
@@ -373,7 +374,7 @@ export default function ExtendStayPage() {
         toast.error('Pricing updated. Please review the new amount.');
         return;
       }
-      const message = error?.response?.data?.message || 'Failed to initiate extension payment.';
+      const message = getErrorMessage(error, 'Failed to initiate extension payment.');
       toast.error(message);
     }
   };
@@ -404,7 +405,7 @@ export default function ExtendStayPage() {
         toast.error(response.data?.message || 'Payment verification failed.');
       }
     } catch (error: any) {
-      const message = error?.response?.data?.message || 'Payment verification failed.';
+      const message = getErrorMessage(error, 'Payment verification failed.');
       toast.error(message);
     } finally {
       setVerifyingPayment(false);

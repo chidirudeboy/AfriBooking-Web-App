@@ -13,6 +13,7 @@ import {
 import toast from 'react-hot-toast';
 import { format, differenceInDays, differenceInHours, differenceInMinutes, parseISO } from 'date-fns';
 import { safeFormat } from '@/lib/utils';
+import { getErrorMessage } from '@/lib/utils/errors';
 
 interface UserRequest {
   id: string;
@@ -54,7 +55,7 @@ export default function MyRequestsPage() {
     } catch (error: any) {
       console.error('Error fetching requests:', error);
       if (error.response?.status !== 404) {
-        toast.error(error.response?.data?.error || 'Failed to load requests');
+        toast.error(getErrorMessage(error, 'Failed to load requests'));
       }
     } finally {
       setLoading(false);
@@ -87,8 +88,7 @@ export default function MyRequestsPage() {
     } catch (error: any) {
       console.error('Error closing request:', error);
       const errorMessage = error.response?.data?.error 
-        || error.response?.data?.message 
-        || 'Failed to close request. Please try again later.';
+        || getErrorMessage(error, 'Failed to close request. Please try again later.');
       toast.error(errorMessage);
     }
   };
@@ -106,7 +106,7 @@ export default function MyRequestsPage() {
       fetchRequests();
     } catch (error: any) {
       console.error('Error deleting request:', error);
-      toast.error(error.response?.data?.error || 'Failed to delete request');
+      toast.error(getErrorMessage(error, 'Failed to delete request'));
     }
   };
 

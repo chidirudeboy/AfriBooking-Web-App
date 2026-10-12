@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { generateReferralCode, getMyAgentReferrals, getMyReferral } from '@/lib/endpoints';
 import api from '@/lib/utils/api';
 import toast from 'react-hot-toast';
+import { getErrorMessage } from '@/lib/utils/errors';
 
 export default function ReferralsPage() {
   const { user, loading: authLoading } = useAuth();
@@ -42,7 +43,7 @@ export default function ReferralsPage() {
       const { data } = await api.post(generateReferralCode, {});
       setCode(data?.data?.referralCode || '');
       toast.success('Referral code created.');
-    } catch (error: any) { toast.error(error?.response?.data?.message || 'Unable to generate a referral code.'); }
+    } catch (error: any) { toast.error(getErrorMessage(error, 'Unable to generate a referral code.')); }
     finally { setGenerating(false); }
   };
 

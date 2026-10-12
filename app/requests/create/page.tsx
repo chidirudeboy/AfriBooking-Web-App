@@ -10,6 +10,7 @@ import api from '@/lib/utils/api';
 import { ArrowLeft, FileText, Send } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { containsBlockedContactDetails, BLOCKED_MESSAGE } from '@/lib/utils/chatContentCheck';
+import { getErrorMessage } from '@/lib/utils/errors';
 
 export default function CreateRequestPage() {
   const REQUEST_TYPE_OPTIONS = [
@@ -164,7 +165,7 @@ export default function CreateRequestPage() {
       }
     } catch (error: any) {
       console.error('Error creating request:', error);
-      toast.error(error.response?.data?.error || 'Failed to create request');
+      toast.error(getErrorMessage(error, 'Failed to create request'));
     } finally {
       setLoading(false);
     }

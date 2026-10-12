@@ -8,6 +8,7 @@ import RatingStars from '@/components/RatingStars';
 import { getApartmentReviews, getApartmentReviewStats } from '@/lib/endpoints';
 import api from '@/lib/utils/api';
 import toast from 'react-hot-toast';
+import { getErrorMessage } from '@/lib/utils/errors';
 
 export default function ApartmentReviewsPage() {
   const { id } = useParams<{ id: string }>();
@@ -28,7 +29,7 @@ export default function ApartmentReviewsPage() {
       setPage(payload?.pagination?.currentPage || nextPage);
       setHasNext(Boolean(payload?.pagination?.hasNextPage));
       if (statsResponse) setStats(statsResponse.data?.data || null);
-    } catch (error: any) { toast.error(error?.response?.data?.message || 'Unable to load reviews.'); }
+    } catch (error: any) { toast.error(getErrorMessage(error, 'Unable to load reviews.')); }
     finally { setLoading(false); setLoadingMore(false); }
   }, [id]);
 

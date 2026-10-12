@@ -1,11 +1,12 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import api from '@/lib/utils/api';
 import { addFavorite, getFavorites, removeFavorite } from '@/lib/endpoints';
 import { useAuth } from '@/contexts/AuthContext';
+import { getErrorMessage } from '@/lib/utils/errors';
 
 export function useFavorites() {
   const { user } = useAuth();
@@ -13,6 +14,12 @@ export function useFavorites() {
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
   const [loadingFavorites, setLoadingFavorites] = useState(false);
+
+  // Refs let toggleFavorite keep a stable identity so memoized cards don't all re-render.
+  const favoriteIdsRef = useRef(favoriteIds);
+  const pendingIdsRef = useRef(pendingIds);
+  favoriteIdsRef.current = favoriteIds;
+  pendingIdsRef.current = pendingIds;
 
   const refreshFavorites = useCallback(async () => {
     if (!user) {
@@ -26,7 +33,7 @@ export function useFavorites() {
       setFavoriteIds(new Set(Array.isArray(ids) ? ids.map(String) : []));
     } catch (error: any) {
       if (error?.response?.status !== 401) {
-        toast.error(error?.response?.data?.message || 'Unable to load saved stays.');
+        toast.error(getErrorMessage(error, 'Unable to load saved stays.'));
       }
     } finally {
       setLoadingFavorites(false);
@@ -37,14 +44,14 @@ export function useFavorites() {
     refreshFavorites();
   }, [refreshFavorites]);
 
-  const toggleFavorite = async (apartmentId: string) => {
+  const toggleFavorite = useCallback(async (apartmentId: string) => {
     if (!user) {
       router.push(`/login?returnTo=${encodeURIComponent(window.location.pathname)}`);
       return;
     }
-    if (pendingIds.has(apartmentId)) return;
+    if (pendingIdsRef.current.has(apartmentId)) return;
 
-    const wasFavorite = favoriteIds.has(apartmentId);
+    const wasFavorite = favoriteIdsRef.current.has(apartmentId);
     setPendingIds((current) => new Set(current).add(apartmentId));
     setFavoriteIds((current) => {
       const next = new Set(current);
@@ -62,7 +69,7 @@ export function useFavorites() {
         wasFavorite ? next.add(apartmentId) : next.delete(apartmentId);
         return next;
       });
-      toast.error(error?.response?.data?.message || 'Unable to update saved stays.');
+      toast.error(getErrorMessage(error, 'Unable to update saved stays.'));
     } finally {
       setPendingIds((current) => {
         const next = new Set(current);
@@ -70,7 +77,7 @@ export function useFavorites() {
         return next;
       });
     }
-  };
+  }, [user, router]);
 
   return { favoriteIds, pendingIds, loadingFavorites, refreshFavorites, toggleFavorite };
 }

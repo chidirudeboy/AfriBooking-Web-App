@@ -9,6 +9,7 @@ import { numberWithCommas, safeFormat } from '@/lib/utils';
 import axios from 'axios';
 import { Calendar, ChevronRight, RefreshCw, Home } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { getErrorMessage } from '@/lib/utils/errors';
 
 interface Booking {
   _id: string;
@@ -104,7 +105,7 @@ export default function BookingsPage() {
       if (error.response?.status === 404) {
         setBookings([]);
       } else if (error.response?.status >= 500 || !error.response) {
-        toast.error('Unable to load booking history. Please check your connection and try again.');
+        toast.error(getErrorMessage(error, 'Unable to load booking history. Please check your connection and try again.'));
       } else {
         setBookings([]);
       }

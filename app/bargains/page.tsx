@@ -9,6 +9,7 @@ import { getMyBargains } from '@/lib/endpoints';
 import api from '@/lib/utils/api';
 import { bargainStatus, formatDateRange, formatNaira, reservationLabel } from '@/lib/utils/bargain';
 import toast from 'react-hot-toast';
+import { getErrorMessage } from '@/lib/utils/errors';
 
 export default function BargainsPage() {
   const { user, loading: authLoading } = useAuth();
@@ -22,7 +23,7 @@ export default function BargainsPage() {
       const { data } = await api.get(getMyBargains);
       setItems(data?.data || []);
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Unable to load your offers.');
+      toast.error(getErrorMessage(error, 'Unable to load your offers.'));
     } finally {
       setLoading(false);
     }

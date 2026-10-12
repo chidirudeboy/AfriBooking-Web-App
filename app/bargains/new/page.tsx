@@ -9,6 +9,7 @@ import { createBargain, createInquiryChat, getBargainConfig } from '@/lib/endpoi
 import api from '@/lib/utils/api';
 import { formatDateRange, formatNaira, reservationLabel } from '@/lib/utils/bargain';
 import toast from 'react-hot-toast';
+import { getErrorMessage } from '@/lib/utils/errors';
 
 function NewBargainContent() {
   const params = useSearchParams();
@@ -63,7 +64,7 @@ function NewBargainContent() {
       toast.success('Your offer has been sent.');
       router.replace(bargainId ? `/bargains/${bargainId}` : '/bargains');
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Unable to send your offer.');
+      toast.error(getErrorMessage(error, 'Unable to send your offer.'));
     } finally {
       setSubmitting(false);
     }

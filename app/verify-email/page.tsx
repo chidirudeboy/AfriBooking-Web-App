@@ -6,6 +6,7 @@ import { requestEmailVerification, verifyEmailVerification } from '@/lib/endpoin
 import api from '@/lib/utils/api';
 import toast from 'react-hot-toast';
 import { ArrowLeft, Mail } from 'lucide-react';
+import { getErrorMessage } from '@/lib/utils/errors';
 
 function VerifyEmailContent() {
   const router = useRouter();
@@ -37,7 +38,7 @@ function VerifyEmailContent() {
         toast.error(res.data?.message || 'Verification failed.');
       }
     } catch (error: any) {
-      const msg = error?.response?.data?.error || error?.response?.data?.message || error?.message || 'Verification failed.';
+      const msg = error?.response?.data?.error || getErrorMessage(error, 'Verification failed.');
       toast.error(msg);
     } finally {
       setLoading(false);
@@ -54,7 +55,7 @@ function VerifyEmailContent() {
       const res = await api.post(requestEmailVerification, { email });
       toast.success(res.data?.message || 'Verification code sent.');
     } catch (error: any) {
-      const msg = error?.response?.data?.error || error?.response?.data?.message || error?.message || 'Failed to resend.';
+      const msg = error?.response?.data?.error || getErrorMessage(error, 'Failed to resend.');
       toast.error(msg);
     } finally {
       setResending(false);

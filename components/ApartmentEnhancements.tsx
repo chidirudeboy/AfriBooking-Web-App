@@ -10,6 +10,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useFavorites } from '@/hooks/useFavorites';
 import RatingStars from '@/components/RatingStars';
 import toast from 'react-hot-toast';
+import { getErrorMessage } from '@/lib/utils/errors';
 
 export default function ApartmentEnhancements({ apartment, reservationType, selectedBedrooms, price }: { apartment: TApartments; reservationType: string; selectedBedrooms: number | null; price: number }) {
   const router = useRouter();
@@ -62,7 +63,7 @@ export default function ApartmentEnhancements({ apartment, reservationType, sele
       const chatId = data?.data?.chat?._id || data?.data?.chat?.id;
       if (!chatId) throw new Error('Conversation could not be opened.');
       router.push(`/messages/${chatId}`);
-    } catch (error: any) { toast.error(error?.response?.data?.message || error?.message || 'Unable to contact the owner.'); }
+    } catch (error: any) { toast.error(getErrorMessage(error, 'Unable to contact the owner.')); }
     finally { setOpeningChat(false); }
   };
 

@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format, addMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isBefore, isAfter, addDays, isSameMonth, startOfWeek, endOfWeek, eachMonthOfInterval, isWithinInterval } from 'date-fns';
+import { getErrorMessage } from '@/lib/utils/errors';
 
 function ReservationRequestContent() {
   const params = useParams();
@@ -122,7 +123,7 @@ function ReservationRequestContent() {
       }
     } catch (error: any) {
       console.error('Error fetching apartment details:', error);
-      toast.error(error.response?.data?.message || 'Failed to load apartment details');
+      toast.error(getErrorMessage(error, 'Failed to load apartment details'));
     } finally {
       setApartmentLoading(false);
       setLoading(false);
@@ -352,7 +353,7 @@ function ReservationRequestContent() {
 
       if (error.response) {
         console.error('Error response:', error.response.data);
-        toast.error(error.response.data?.message || 'Failed to request inspection');
+        toast.error(getErrorMessage(error, 'Failed to request inspection'));
       } else {
         toast.error('Network error occurred');
       }
@@ -475,7 +476,7 @@ function ReservationRequestContent() {
       }
     } catch (error: any) {
       console.error('Error submitting reservation:', error);
-      toast.error(error.response?.data?.message || 'Failed to submit reservation request');
+      toast.error(getErrorMessage(error, 'Failed to submit reservation request'));
     } finally {
       setSubmitting(false);
     }
