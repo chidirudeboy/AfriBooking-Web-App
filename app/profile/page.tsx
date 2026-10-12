@@ -3,15 +3,13 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { useSidebar } from '@/contexts/SidebarContext';
-import Sidebar from '@/components/Sidebar';
+import AppShell from '@/components/AppShell';
 import { ArrowLeft, Settings as SettingsIcon, User, Mail, Phone, Edit2, Save, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function ProfilePage() {
   const router = useRouter();
   const { user, profile, loading, updateProfile, getProfile } = useAuth();
-  const { isCollapsed } = useSidebar();
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({
     first_name: '',
@@ -108,13 +106,10 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="flex min-h-screen bg-gray-50 dark:bg-gray-900">
-      <Sidebar />
-      
-      <div className={`flex-1 transition-all duration-300 ${isCollapsed ? 'lg:ml-20' : 'lg:ml-64'}`}>
-        <main className="max-w-4xl mx-auto px-3 sm:px-4 lg:px-8 py-4 sm:py-6">
-          {/* Header */}
-          <div className="mb-4 sm:mb-6 flex items-center justify-between">
+    <AppShell width="max-w-4xl">
+      <div>
+        {/* Header */}
+        <div className="mb-6 flex items-center justify-between">
             <div className="flex items-center gap-4">
               <button
                 onClick={() => router.back()}
@@ -294,9 +289,8 @@ export default function ProfilePage() {
               </div>
             )}
           </div>
-        </main>
-      </div>
-    </div>
-  );
-}
+        </div>
+      </AppShell>
+    );
+  }
 

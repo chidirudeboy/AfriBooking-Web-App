@@ -10,8 +10,16 @@ import api from '@/lib/utils/api';
 import { ArrowLeft, FileText, Send } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { containsBlockedContactDetails, BLOCKED_MESSAGE } from '@/lib/utils/chatContentCheck';
+import { getErrorMessage } from '@/lib/utils/errors';
 
 export default function CreateRequestPage() {
+  const REQUEST_TYPE_OPTIONS = [
+    { value: 'normal', label: 'Normal Stay' },
+    { value: 'party', label: 'Party' },
+    { value: 'movie', label: 'Movie shoot' },
+    { value: 'photo', label: 'Photo shoot' },
+  ] as const;
+
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
   const { isCollapsed } = useSidebar();
@@ -20,6 +28,7 @@ export default function CreateRequestPage() {
   const [state, setState] = useState('');
   const [apartmentType, setApartmentType] = useState<'private' | 'unit' | ''>('');
   const [propertyType, setPropertyType] = useState<'duplex' | 'flat' | ''>('');
+  const [reservationType, setReservationType] = useState<'normal' | 'party' | 'movie' | 'photo' | ''>('');
   const [minBudget, setMinBudget] = useState('');
   const [maxBudget, setMaxBudget] = useState('');
   const [additionalNotes, setAdditionalNotes] = useState('');
@@ -79,6 +88,11 @@ export default function CreateRequestPage() {
       return;
     }
 
+    if (!reservationType) {
+      toast.error('Please select a request type');
+      return;
+    }
+
     // Validate dates if provided
     if (checkInDate && checkOutDate) {
       const checkIn = new Date(checkInDate);
@@ -132,6 +146,7 @@ export default function CreateRequestPage() {
         bedrooms: bedroomsNum,
         city: city.trim(),
         state: state.trim(),
+        reservationType,
       };
       
       if (apartmentType) requestData.apartmentType = apartmentType;
@@ -150,7 +165,7 @@ export default function CreateRequestPage() {
       }
     } catch (error: any) {
       console.error('Error creating request:', error);
-      toast.error(error.response?.data?.error || 'Failed to create request');
+      toast.error(getErrorMessage(error, 'Failed to create request'));
     } finally {
       setLoading(false);
     }
@@ -305,6 +320,28 @@ export default function CreateRequestPage() {
                 >
                   Flat
                 </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">
+                Request Type *
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                {REQUEST_TYPE_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setReservationType(option.value)}
+                    className={`px-4 py-3 rounded-xl border-2 transition-all font-medium ${
+                      reservationType === option.value
+                        ? 'bg-amber-500 border-amber-500 text-white'
+                        : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-amber-300'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
               </div>
             </div>
 

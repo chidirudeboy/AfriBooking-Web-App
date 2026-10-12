@@ -3,8 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { useSidebar } from '@/contexts/SidebarContext';
-import Sidebar from '@/components/Sidebar';
+import AppShell from '@/components/AppShell';
 import { getUserRequests, closeUserRequest, deleteUserRequest } from '@/lib/endpoints';
 import api from '@/lib/utils/api';
 import { 
@@ -13,6 +12,8 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format, differenceInDays, differenceInHours, differenceInMinutes, parseISO } from 'date-fns';
+import { safeFormat } from '@/lib/utils';
+import { getErrorMessage } from '@/lib/utils/errors';
 
 interface UserRequest {
   id: string;
@@ -33,7 +34,6 @@ interface UserRequest {
 export default function MyRequestsPage() {
   const { user } = useAuth();
   const router = useRouter();
-  const { isCollapsed } = useSidebar();
   const [requests, setRequests] = useState<UserRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState<'active' | 'closed' | 'all'>('all');
@@ -55,7 +55,7 @@ export default function MyRequestsPage() {
     } catch (error: any) {
       console.error('Error fetching requests:', error);
       if (error.response?.status !== 404) {
-        toast.error(error.response?.data?.error || 'Failed to load requests');
+        toast.error(getErrorMessage(error, 'Failed to load requests'));
       }
     } finally {
       setLoading(false);
@@ -88,8 +88,7 @@ export default function MyRequestsPage() {
     } catch (error: any) {
       console.error('Error closing request:', error);
       const errorMessage = error.response?.data?.error 
-        || error.response?.data?.message 
-        || 'Failed to close request. Please try again later.';
+        || getErrorMessage(error, 'Failed to close request. Please try again later.');
       toast.error(errorMessage);
     }
   };
@@ -107,7 +106,7 @@ export default function MyRequestsPage() {
       fetchRequests();
     } catch (error: any) {
       console.error('Error deleting request:', error);
-      toast.error(error.response?.data?.error || 'Failed to delete request');
+      toast.error(getErrorMessage(error, 'Failed to delete request'));
     }
   };
 
@@ -142,11 +141,8 @@ export default function MyRequestsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <Sidebar />
-      
-      <main className={`transition-all duration-300 ${isCollapsed ? 'lg:ml-20' : 'lg:ml-64'} ml-0`}>
-        <div className="p-6">
+    <AppShell width="max-w-5xl">
+      <div>
           {/* Header */}
           <div className="mb-6 flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -263,7 +259,7 @@ export default function MyRequestsPage() {
                               CHECK-IN
                             </p>
                             <p className="text-xs font-semibold text-gray-900 dark:text-white">
-                              {format(parseISO(request.checkInDate), 'MMM d')}
+                              {safeFormat(request.checkInDate, 'MMM d')}
                             </p>
                           </div>
                         )}
@@ -276,7 +272,7 @@ export default function MyRequestsPage() {
                               CHECK-OUT
                             </p>
                             <p className="text-xs font-semibold text-gray-900 dark:text-white">
-                              {format(parseISO(request.checkOutDate), 'MMM d')}
+                              {safeFormat(request.checkOutDate, 'MMM d')}
                             </p>
                           </div>
                         )}
@@ -367,7 +363,6 @@ export default function MyRequestsPage() {
             </div>
           )}
         </div>
-      </main>
-    </div>
-  );
-}
+      </AppShell>
+    );
+  }

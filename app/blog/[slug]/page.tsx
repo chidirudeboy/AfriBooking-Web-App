@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import Image from 'next/image';
 import { notFound } from 'next/navigation';
 import { getBlogBySlug } from '@/lib/blog';
 
@@ -71,11 +72,18 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
           </p>
         </div>
 
-        <div className="mt-10 overflow-hidden rounded-3xl border border-white/10 bg-white/[0.04]">
+        <div className="relative mt-10 overflow-hidden rounded-3xl border border-white/10 bg-white/[0.04] h-[260px] sm:h-[420px]">
           {post.coverImage ? (
-            <img src={post.coverImage} alt={post.title} className="h-[260px] w-full object-cover sm:h-[420px]" />
+            <Image
+              src={post.coverImage}
+              alt={post.title}
+              fill
+              priority
+              sizes="(max-width: 1152px) 100vw, 1152px"
+              className="object-cover"
+            />
           ) : (
-            <div className="flex h-[260px] items-center justify-center bg-gradient-to-br from-amber-500/20 to-slate-900 text-2xl font-semibold text-amber-100 sm:h-[420px]">
+            <div className="flex h-full items-center justify-center bg-gradient-to-br from-amber-500/20 to-slate-900 text-2xl font-semibold text-amber-100">
               AfriBooking Blog
             </div>
           )}

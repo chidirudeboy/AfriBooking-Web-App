@@ -3,8 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { useSidebar } from '@/contexts/SidebarContext';
-import Sidebar from '@/components/Sidebar';
+import AppShell from '@/components/AppShell';
 import { 
   ArrowLeft, 
   User, 
@@ -13,7 +12,8 @@ import {
   LogOut, 
   Trash2,
   ChevronRight,
-  AlertCircle
+  AlertCircle,
+  Bell
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -63,10 +63,14 @@ const SettingsItem = ({ label, icon, onClick, isDanger = false }: SettingsItemPr
 export default function SettingsPage() {
   const router = useRouter();
   const { user, logout, deleteAccount, loading } = useAuth();
-  const { isCollapsed } = useSidebar();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
   const [showPasswordInput, setShowPasswordInput] = useState(false);
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | 'unsupported'>('default');
+
+  useEffect(() => {
+    setNotificationPermission(typeof Notification === 'undefined' ? 'unsupported' : Notification.permission);
+  }, []);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -95,14 +99,25 @@ export default function SettingsPage() {
     window.open('https://termify.io/terms-and-conditions/GuDn0fVx1P', '_blank');
   };
 
+  const handleNotifications = async () => {
+    if (typeof Notification === 'undefined') {
+      toast.error('Browser notifications are not supported on this device.');
+      return;
+    }
+    if (Notification.permission === 'denied') {
+      toast.error('Notifications are blocked. Enable them from your browser site settings.');
+      return;
+    }
+    const permission = await Notification.requestPermission();
+    setNotificationPermission(permission);
+    if (permission === 'granted') toast.success('Browser notifications are on.');
+  };
+
   return (
-    <div className="flex min-h-screen bg-gray-50 dark:bg-gray-900">
-      <Sidebar />
-      
-      <div className={`flex-1 transition-all duration-300 ${isCollapsed ? 'lg:ml-20' : 'lg:ml-64'}`}>
-        <main className="max-w-4xl mx-auto px-3 sm:px-4 lg:px-8 py-4 sm:py-6">
-          {/* Header */}
-          <div className="mb-4 sm:mb-6">
+    <AppShell width="max-w-4xl">
+      <div>
+        {/* Header */}
+        <div className="mb-6">
             <button
               onClick={() => router.back()}
               className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white mb-4"
@@ -138,6 +153,11 @@ export default function SettingsPage() {
                 label="Support"
                 icon={<Headphones size={18} />}
                 onClick={() => router.push('/support')}
+              />
+              <SettingsItem
+                label={notificationPermission === 'granted' ? 'Browser notifications · On' : 'Enable browser notifications'}
+                icon={<Bell size={18} />}
+                onClick={handleNotifications}
               />
               <SettingsItem
                 label="Sign out"
@@ -236,8 +256,7 @@ export default function SettingsPage() {
               Version {process.env.NEXT_PUBLIC_APP_VERSION || '1.0.0'}
             </p>
           </div>
-        </main>
-      </div>
-    </div>
-  );
-}
+        </div>
+      </AppShell>
+    );
+  }

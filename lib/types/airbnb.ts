@@ -87,10 +87,16 @@ export type TApartments = {
   isBooked: boolean;
   allowedReservations: string[];
   webLink: string;
+  isVerified?: boolean;
+  isFeatured?: boolean;
+  averageRating?: number;
+  totalReviews?: number;
+  location?: { lat?: number; lng?: number };
+  lat?: number;
+  lng?: number;
   bedroomPricing?: TBedroomPricing[];
   seasonalPricing?: TSeasonalPricing[];
   createdAt: string;
   updatedAt: string;
   __v: number;
 };
-

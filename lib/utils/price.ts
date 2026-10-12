@@ -18,7 +18,7 @@ export const getPrice = (
       photo: 'photoShootFee',
     }[reservationType] as keyof TOptionalFees;
 
-    basePrice = post.optionalFees?.[optionalFeeKey] || post.defaultStayFee || 0;
+    basePrice = post.optionalFees?.[optionalFeeKey] || 0;
   }
   
   // Bedroom pricing ONLY applies to "normal" reservations (matches backend logic)

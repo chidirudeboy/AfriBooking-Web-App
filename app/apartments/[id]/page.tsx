@@ -3,20 +3,24 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Image from 'next/image';
+import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
-import { useSidebar } from '@/contexts/SidebarContext';
-import Sidebar from '@/components/Sidebar';
+import AppShell from '@/components/AppShell';
 import { TApartments, TOptionalFees } from '@/lib/types/airbnb';
 import { getEveryApartments, getSingleApartmentUserDetails, paymentHistory, cancelReservation } from '@/lib/endpoints';
 import { numberWithCommas } from '@/lib/utils';
+import { config } from '@/lib/config/environment';
 import { getPrice } from '@/lib/utils/price';
 import axios from 'axios';
 import { 
   MapPin, Bed, Bath, Users, ChevronLeft, ChevronRight, 
   CheckCircle, Copy, ArrowLeft, Calendar, Shield, Building2, Play
 } from 'lucide-react';
-import MediaModal from '@/components/MediaModal';
+import dynamic from 'next/dynamic';
+const MediaModal = dynamic(() => import('@/components/MediaModal'), { ssr: false });
 import toast from 'react-hot-toast';
+import ApartmentEnhancements from '@/components/ApartmentEnhancements';
+import { getErrorMessage } from '@/lib/utils/errors';
 
 export default function ApartmentDetailsPage() {
   const params = useParams();
@@ -212,7 +216,7 @@ export default function ApartmentDetailsPage() {
 
       console.log('🔍 Searching for reservationId in booking history...');
       const response = await fetch(
-        `https://api.africartz.com/api/bookings/user/history?page=1&limit=100&status=pending,accepted,declined&startDate=${today}&endDate=${futureDate}`,
+        `${config.baseUrl}/bookings/user/history?page=1&limit=100&status=pending,accepted,declined&startDate=${today}&endDate=${futureDate}`,
         {
           method: 'GET',
           headers: {
@@ -414,7 +418,7 @@ export default function ApartmentDetailsPage() {
       }
     } catch (error: any) {
       console.error('Error cancelling reservation:', error);
-      toast.error(error.response?.data?.message || 'Failed to cancel reservation. Please try again.');
+      toast.error(getErrorMessage(error, 'Failed to cancel reservation. Please try again.'));
     } finally {
       setIsCancelling(false);
     }
@@ -528,7 +532,7 @@ export default function ApartmentDetailsPage() {
 
       // Try to fetch single apartment details first
       try {
-        const response = await axios.get(`${getSingleApartmentUserDetails}?apartmentId=${apartmentId}`, {
+        const response = await axios.get(`${getSingleApartmentUserDetails}/${apartmentId}`, {
           headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
@@ -575,7 +579,7 @@ export default function ApartmentDetailsPage() {
       }
     } catch (error: any) {
       console.error('Error fetching apartment details:', error);
-      toast.error(error.response?.data?.message || 'Failed to load apartment details');
+      toast.error(getErrorMessage(error, 'Failed to load apartment details'));
     } finally {
       setLoading(false);
     }
@@ -604,7 +608,7 @@ export default function ApartmentDetailsPage() {
     // Add full apartment option
     options.push({
       bedrooms: null,
-      label: `${apartment.bedrooms} Bedrooms (Full Apartment)`,
+      label: apartment.bedrooms === 0 ? 'Studio (Full Apartment)' : `${apartment.bedrooms} Bedrooms (Full Apartment)`,
       price: getPrice(apartment, reservationType as any, null)
     });
     
@@ -613,7 +617,7 @@ export default function ApartmentDetailsPage() {
       const configPrice = getPrice(apartment, reservationType as any, config.bedrooms);
       options.push({
         bedrooms: config.bedrooms,
-        label: `${config.bedrooms} ${config.bedrooms === 1 ? 'Bedroom' : 'Bedrooms'}`,
+        label: config.bedrooms === 0 ? 'Studio' : `${config.bedrooms} ${config.bedrooms === 1 ? 'Bedroom' : 'Bedrooms'}`,
         price: configPrice
       });
     });
@@ -638,6 +642,16 @@ export default function ApartmentDetailsPage() {
     if (!apartment) return 0;
     return getPrice(apartment, reservationType as any, selectedBedrooms);
   }, [apartment, reservationType, selectedBedrooms]);
+
+  const reservationTypeAllowed = (value: string) => {
+    if (!apartment || value === 'normal') return true;
+    const fee = value === 'party'
+      ? apartment.optionalFees?.partyFee
+      : value === 'movie'
+        ? apartment.optionalFees?.movieShootFee
+        : apartment.optionalFees?.photoShootFee;
+    return Number(fee || 0) > 0 && (!Array.isArray(apartment.allowedReservations) || apartment.allowedReservations.includes(value));
+  };
 
   // Parse amenities
   const amenities = useMemo(() => {
@@ -746,35 +760,29 @@ export default function ApartmentDetailsPage() {
     }
   };
 
-  const { isCollapsed } = useSidebar();
-
   if (loading) {
     return (
-      <div className="flex min-h-screen bg-gray-50 dark:bg-gray-900">
-        <Sidebar />
-        <div className={`flex-1 transition-all duration-300 ${isCollapsed ? 'lg:ml-20' : 'lg:ml-64'} flex items-center justify-center`}>
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      <AppShell>
+        <div className="flex items-center justify-center py-24">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#ffbf00]"></div>
         </div>
-      </div>
+      </AppShell>
     );
   }
 
   if (!apartment) {
     return (
-      <div className="flex min-h-screen bg-gray-50 dark:bg-gray-900">
-        <Sidebar />
-        <div className={`flex-1 transition-all duration-300 ${isCollapsed ? 'lg:ml-20' : 'lg:ml-64'} flex items-center justify-center`}>
-          <div className="text-center">
-            <p className="text-gray-500 dark:text-gray-400 text-lg">Apartment not found</p>
-            <button
-              onClick={() => router.push('/apartments')}
-              className="mt-4 text-primary hover:underline"
-            >
-              Back to Apartments
-            </button>
-          </div>
+      <AppShell>
+        <div className="text-center py-24">
+          <p className="text-gray-500 dark:text-gray-400 text-lg">Apartment not found</p>
+          <button
+            onClick={() => router.push('/apartments')}
+            className="mt-4 text-[#896300] dark:text-[#ffbf00] font-semibold hover:underline"
+          >
+            Back to Apartments
+          </button>
         </div>
-      </div>
+      </AppShell>
     );
   }
 
@@ -783,19 +791,27 @@ export default function ApartmentDetailsPage() {
   const currentMedia = mediaItems[currentImageIndex] || { type: 'image', uri: fallbackImage };
 
   return (
-    <div className="flex min-h-screen bg-gray-50 dark:bg-gray-900 overflow-x-hidden">
-      <Sidebar />
-      
-      <div className={`flex-1 transition-all duration-300 ${isCollapsed ? 'lg:ml-20' : 'lg:ml-64'} w-0 min-w-0`}>
-        <main className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8 py-4 sm:py-6 w-full overflow-x-hidden">
-          {/* Back Button */}
-          <button
-            onClick={() => router.back()}
-            className="mb-3 sm:mb-4 flex items-center text-sm sm:text-base text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
-          >
-            <ArrowLeft size={18} className="sm:w-5 sm:h-5 mr-2" />
-            Back
-          </button>
+    <>
+      <AppShell width="max-w-[1320px]">
+        {/* Breadcrumbs */}
+        <div className="text-xs sm:text-sm text-[#6c7075] dark:text-[#acb4c0] mb-4 flex items-center gap-2">
+          <Link href="/apartments" className="hover:text-[#17191b] dark:hover:text-white transition-colors">
+            Discover
+          </Link>
+          <span>/</span>
+          <span>{apartment.city || 'Nigeria'}</span>
+          <span>/</span>
+          <span className="text-[#17191b] dark:text-white font-medium truncate">{apartment.apartmentName}</span>
+        </div>
+
+        {/* Back Button */}
+        <button
+          onClick={() => router.back()}
+          className="mb-3 sm:mb-4 flex items-center text-sm font-semibold text-[#6c7075] dark:text-[#acb4c0] hover:text-[#17191b] dark:hover:text-white"
+        >
+          <ArrowLeft size={16} className="mr-1.5" />
+          Back
+        </button>
 
           {/* Media Carousel (Images and Videos) */}
           <div className="relative w-full h-64 sm:h-80 md:h-96 lg:h-[500px] rounded-lg overflow-hidden mb-4 sm:mb-6 bg-gray-200 dark:bg-gray-700">
@@ -811,6 +827,7 @@ export default function ApartmentDetailsPage() {
                       <video
                         ref={videoRef}
                         src={currentMedia.uri}
+                        preload="metadata"
                         className="w-full h-full object-cover pointer-events-none"
                         controls={isVideoPlaying}
                         autoPlay={isVideoPlaying}
@@ -836,6 +853,8 @@ export default function ApartmentDetailsPage() {
                       src={currentMedia.uri}
                       alt={apartment.apartmentName}
                       fill
+                      sizes="(max-width: 1024px) 100vw, 1100px"
+                      quality={75}
                       className="object-cover cursor-pointer"
                       priority
                     />
@@ -907,6 +926,7 @@ export default function ApartmentDetailsPage() {
                     <>
                       <video
                         src={mediaItem.uri}
+                        preload="metadata"
                         className="w-full h-full object-cover"
                         muted
                         playsInline
@@ -926,6 +946,8 @@ export default function ApartmentDetailsPage() {
                       src={mediaItem.uri}
                       alt={`Thumbnail ${index + 1}`}
                       fill
+                      sizes="96px"
+                      quality={60}
                       className="object-cover"
                     />
                   )}
@@ -998,8 +1020,19 @@ export default function ApartmentDetailsPage() {
 
                   <div className="relative w-full">
                     <button
-                      onClick={() => setShowBedroomDropdown(!showBedroomDropdown)}
-                      className="w-full flex items-center justify-between p-4 border-2 border-gray-300 dark:border-gray-600 rounded-lg hover:border-primary dark:hover:border-primary transition-colors bg-white dark:bg-gray-800"
+                      onClick={() => {
+                        if (reservationStatus === 'accepted') {
+                          toast.error('Bedroom selection is locked. You cannot change the bedroom configuration for an accepted reservation.');
+                          return;
+                        }
+                        setShowBedroomDropdown(!showBedroomDropdown);
+                      }}
+                      disabled={reservationStatus === 'accepted'}
+                      className={`w-full flex items-center justify-between p-4 border-2 border-gray-300 dark:border-gray-600 rounded-lg transition-colors ${
+                        reservationStatus === 'accepted'
+                          ? 'opacity-60 cursor-not-allowed bg-gray-100 dark:bg-gray-700'
+                          : 'hover:border-primary dark:hover:border-primary bg-white dark:bg-gray-800'
+                      }`}
                     >
                       <div className="flex items-center flex-1 min-w-0">
                         <Bed size={20} className="mr-3 text-gray-600 dark:text-gray-400 flex-shrink-0" />
@@ -1007,7 +1040,7 @@ export default function ApartmentDetailsPage() {
                           <p className="font-semibold text-gray-900 dark:text-white truncate">
                             {selectedBedrooms !== null
                               ? getBedroomOptions.find(opt => opt.bedrooms === selectedBedrooms)?.label.replace(' (Full Apartment)', '') || 
-                                `${selectedBedrooms} ${selectedBedrooms === 1 ? 'Bedroom' : 'Bedrooms'}`
+                                (selectedBedrooms === 0 ? 'Studio' : `${selectedBedrooms} ${selectedBedrooms === 1 ? 'Bedroom' : 'Bedrooms'}`)
                               : 'Select bedroom configuration'}
                           </p>
                           {selectedBedrooms !== null && (
@@ -1023,7 +1056,20 @@ export default function ApartmentDetailsPage() {
                       />
                     </button>
 
-                    {showBedroomDropdown && getBedroomOptions.length > 0 && (
+                    {reservationStatus === 'accepted' && acceptedReservationBedrooms !== undefined && (
+                      <div className="mt-3 p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+                        <p className="text-sm font-semibold text-blue-900 dark:text-blue-200">
+                          Bedroom selection locked: {acceptedReservationBedrooms === null
+                            ? (apartment.bedrooms === 0 ? 'Studio (Full Apartment)' : `${apartment.bedrooms} Bedrooms (Full Apartment)`)
+                            : (acceptedReservationBedrooms === 0 ? 'Studio' : `${acceptedReservationBedrooms} ${acceptedReservationBedrooms === 1 ? 'Bedroom' : 'Bedrooms'}`)}
+                        </p>
+                        <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
+                          This matches your accepted reservation. You cannot change it.
+                        </p>
+                      </div>
+                    )}
+
+                    {showBedroomDropdown && getBedroomOptions.length > 0 && reservationStatus !== 'accepted' && (
                       <div className="absolute z-10 w-full mt-2 bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-700 rounded-lg shadow-lg dark:shadow-gray-900 max-h-80 overflow-y-auto left-0 right-0 max-w-full">
                         {getBedroomOptions.map((option, index) => {
                           const isSelected = selectedBedrooms === option.bedrooms;
@@ -1044,10 +1090,13 @@ export default function ApartmentDetailsPage() {
                                   <div className="min-w-0 flex-1">
                                     <p className="font-semibold text-gray-900 dark:text-white truncate">
                                       {option.label.replace(' (Full Apartment)', '')}
+                                      {option.bedrooms === null && (
+                                        <span className="ml-2 align-middle text-[9px] font-bold uppercase px-1.5 py-0.5 rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400">Full</span>
+                                      )}
                                     </p>
                                     <p className="text-sm text-gray-600 dark:text-gray-400 truncate">
                                       {option.bedrooms !== null 
-                                        ? `${option.bedrooms} ${option.bedrooms === 1 ? 'bedroom' : 'bedrooms'} available`
+                                        ? (option.bedrooms === 0 ? 'Studio' : `${option.bedrooms} ${option.bedrooms === 1 ? 'bedroom' : 'bedrooms'} available`)
                                         : 'Complete apartment access'}
                                     </p>
                                   </div>
@@ -1068,6 +1117,18 @@ export default function ApartmentDetailsPage() {
                       </div>
                     )}
                   </div>
+
+                  {selectedBedrooms !== null && !showBedroomDropdown && (
+                    <div className="mt-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-700 flex items-center justify-between gap-2">
+                      <div className="flex items-center min-w-0">
+                        <CheckCircle size={18} className="mr-2 text-gray-600 dark:text-gray-400 flex-shrink-0" />
+                        <span className="text-sm font-semibold text-gray-900 dark:text-white truncate">
+                          Selected: {getBedroomOptions.find(opt => opt.bedrooms === selectedBedrooms)?.label.replace(' (Full Apartment)', '') || (selectedBedrooms === 0 ? 'Studio' : `${selectedBedrooms} Bedroom${selectedBedrooms !== 1 ? 's' : ''}`)}
+                        </span>
+                      </div>
+                      <span className="font-bold text-gray-900 dark:text-white whitespace-nowrap">₦{numberWithCommas(price)}/night</span>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1106,22 +1167,7 @@ export default function ApartmentDetailsPage() {
                 )}
               </div>
 
-              {/* Share Link */}
-              {apartment.webLink && (
-                <div className="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 mb-4 sm:mb-6 shadow-sm border border-gray-200 dark:border-gray-700">
-                  <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white mb-3 sm:mb-4">Share Link</h2>
-                  <button
-                    onClick={handleCopyLink}
-                    className="w-full flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0 p-3 sm:p-4 bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-200 dark:border-blue-800 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
-                  >
-                    <div className="flex-1 text-left min-w-0 w-full sm:w-auto overflow-hidden">
-                      <p className="text-sm sm:text-base font-medium text-blue-900 dark:text-blue-200 mb-1">Share this apartment</p>
-                      <p className="text-xs sm:text-sm text-blue-700 dark:text-blue-300 break-all sm:truncate overflow-hidden">{apartment.webLink}</p>
-                    </div>
-                    <Copy size={18} className="sm:w-5 sm:h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 sm:ml-4 self-end sm:self-auto" />
-                  </button>
-                </div>
-              )}
+              <ApartmentEnhancements apartment={apartment} reservationType={reservationType} selectedBedrooms={selectedBedrooms} price={price} />
             </div>
 
             {/* Sidebar - Price & Booking */}
@@ -1141,14 +1187,18 @@ export default function ApartmentDetailsPage() {
                     ].map((type) => (
                       <button
                         key={type.value}
-                        onClick={() => setReservationType(type.value)}
+                        disabled={!reservationTypeAllowed(type.value)}
+                        onClick={() => reservationTypeAllowed(type.value) && setReservationType(type.value)}
                         className={`px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors ${
                           reservationType === type.value
                             ? 'bg-primary text-white'
-                            : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                            : reservationTypeAllowed(type.value)
+                              ? 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                              : 'cursor-not-allowed bg-gray-100 text-gray-400 opacity-45 blur-[0.35px] dark:bg-gray-800 dark:text-gray-600'
                         }`}
+                        title={reservationTypeAllowed(type.value) ? type.label : `${type.label} is not allowed for this property`}
                       >
-                        {type.label}
+                        {type.label}{!reservationTypeAllowed(type.value) && <span className="block text-[10px] font-normal">Not allowed</span>}
                       </button>
                     ))}
                   </div>
@@ -1278,11 +1328,10 @@ export default function ApartmentDetailsPage() {
                     <p className="text-sm text-red-700 dark:text-red-400 font-medium">This apartment is currently booked</p>
                   </div>
                 )}
-              </div>
             </div>
           </div>
-        </main>
-      </div>
+        </div>
+      </AppShell>
 
       {/* Media Modal */}
       <MediaModal
@@ -1291,6 +1340,6 @@ export default function ApartmentDetailsPage() {
         mediaItems={mediaItems}
         initialIndex={currentImageIndex}
       />
-    </div>
+    </>
   );
 }

@@ -14,6 +14,7 @@ import {
   Upload, X, CheckCircle, FileText, ScrollText
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { getErrorMessage } from '@/lib/utils/errors';
 
 function BookApartmentContent() {
   const params = useParams();
@@ -226,7 +227,7 @@ function BookApartmentContent() {
       }
     } catch (error: any) {
       console.error('Error fetching apartment details:', error);
-      toast.error(error.response?.data?.message || 'Failed to load apartment details');
+      toast.error(getErrorMessage(error, 'Failed to load apartment details'));
     } finally {
       setLoading(false);
     }

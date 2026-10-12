@@ -5,12 +5,15 @@ import { useRouter, useParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSidebar } from '@/contexts/SidebarContext';
 import Sidebar from '@/components/Sidebar';
-import { ViewUserBookingHistory, getChatByBooking, createChatForBooking, getAllNotification } from '@/lib/endpoints';
-import { numberWithCommas } from '@/lib/utils';
+import { ViewUserBookingHistory, getChatByBooking, createChatForBooking, getAllNotification, createBookingReview } from '@/lib/endpoints';
+import { numberWithCommas, safeFormat } from '@/lib/utils';
 import axios from 'axios';
-import { ArrowLeft, Home, Calendar, Home as HomeIcon, DollarSign, Info, History, MessageSquare, Eye, EyeOff, Copy, Key, X } from 'lucide-react';
+import { ArrowLeft, Home, Calendar, Home as HomeIcon, DollarSign, Info, History, MessageSquare, Eye, EyeOff, Copy, Key, X, Star } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { format, differenceInDays } from 'date-fns';
+import { differenceInDays } from 'date-fns';
+import RatingStars from '@/components/RatingStars';
+import api from '@/lib/utils/api';
+import { getErrorMessage } from '@/lib/utils/errors';
 
 interface BookingDetails {
   _id: string;
@@ -57,6 +60,11 @@ export default function BookingDetailsPage() {
   const [showReleaseCode, setShowReleaseCode] = useState(false);
   const [releaseCodeModalOpen, setReleaseCodeModalOpen] = useState(false);
   const [releaseCodeAcknowledged, setReleaseCodeAcknowledged] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviewRating, setReviewRating] = useState(0);
+  const [reviewComment, setReviewComment] = useState('');
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [reviewSubmitted, setReviewSubmitted] = useState(false);
 
   useEffect(() => {
     if (!user) {
@@ -152,7 +160,7 @@ export default function BookingDetailsPage() {
       }
     } catch (error: any) {
       console.error('Error fetching booking details:', error);
-      toast.error('Failed to load booking details');
+      toast.error(getErrorMessage(error, 'Failed to load booking details'));
       router.push('/bookings');
     } finally {
       setLoading(false);
@@ -167,6 +175,26 @@ export default function BookingDetailsPage() {
       case 'cancelled': return 'bg-red-500';
       default: return 'bg-gray-500';
     }
+  };
+
+  const submitReview = async () => {
+    if (!booking?._id || !reviewRating) return toast.error('Choose a star rating first.');
+    setReviewSubmitting(true);
+    try {
+      const { data } = await api.post(createBookingReview(booking._id), {
+        rating: reviewRating,
+        comment: reviewComment.trim(),
+        categories: { cleanliness: reviewRating, location: reviewRating, communication: reviewRating, value: reviewRating },
+      });
+      if (data?.success === false) throw new Error(data?.message || 'Review could not be submitted.');
+      setReviewSubmitted(true);
+      setReviewOpen(false);
+      toast.success('Thank you for reviewing your stay.');
+    } catch (error: any) {
+      const message = getErrorMessage(error, 'Review could not be submitted.');
+      if (/already exists/i.test(message)) setReviewSubmitted(true);
+      toast.error(message);
+    } finally { setReviewSubmitting(false); }
   };
 
   const getPropertyName = (): string => {
@@ -236,16 +264,16 @@ export default function BookingDetailsPage() {
             }
           } catch (createError: any) {
             console.error('Error creating chat:', createError);
-            toast.error(createError.response?.data?.message || 'Failed to create chat');
+            toast.error(getErrorMessage(createError, 'Failed to create chat'));
           }
         } else {
           console.error('Error fetching chat:', error);
-          toast.error('Failed to access chat');
+          toast.error(getErrorMessage(error, 'Failed to access chat'));
         }
       }
     } catch (error: any) {
       console.error('Error handling chat:', error);
-      toast.error('Failed to access chat');
+      toast.error(getErrorMessage(error, 'Failed to access chat'));
     }
   };
 
@@ -269,8 +297,10 @@ export default function BookingDetailsPage() {
 
   const checkInDate = booking.checkInDate || booking.start_date;
   const checkOutDate = booking.checkOutDate || booking.end_date;
-  const duration = checkInDate && checkOutDate 
-    ? differenceInDays(new Date(checkOutDate), new Date(checkInDate))
+  const checkInParsed = checkInDate ? new Date(checkInDate) : null;
+  const checkOutParsed = checkOutDate ? new Date(checkOutDate) : null;
+  const duration = checkInParsed && checkOutParsed && !isNaN(checkInParsed.getTime()) && !isNaN(checkOutParsed.getTime())
+    ? differenceInDays(checkOutParsed, checkInParsed)
     : 0;
   const totalAmount = booking.amount || booking.pricing?.sellingPrice || booking.totalAmount || 0;
   const bookingId = booking._id || booking.id || '';
@@ -316,7 +346,7 @@ export default function BookingDetailsPage() {
                 <h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white mb-2">Booking Confirmation</h2>
                 {createdDate && (
                   <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400">
-                    Booked on {format(new Date(createdDate), 'MMM dd, yyyy')}
+                    Booked on {safeFormat(createdDate, 'MMM dd, yyyy')}
                   </p>
                 )}
               </div>
@@ -350,7 +380,7 @@ export default function BookingDetailsPage() {
                     <div className="flex flex-col sm:flex-row sm:justify-between gap-2">
                       <span className="text-sm sm:text-base font-medium text-gray-600 dark:text-gray-400">Check-in:</span>
                       <span className="text-sm sm:text-base text-gray-900 dark:text-white">
-                        {format(new Date(checkInDate), 'EEE, MMM dd, yyyy')}
+                        {safeFormat(checkInDate, 'EEE, MMM dd, yyyy')}
                       </span>
                     </div>
                   )}
@@ -358,7 +388,7 @@ export default function BookingDetailsPage() {
                     <div className="flex flex-col sm:flex-row sm:justify-between gap-2">
                       <span className="text-sm sm:text-base font-medium text-gray-600 dark:text-gray-400">Check-out:</span>
                       <span className="text-sm sm:text-base text-gray-900 dark:text-white">
-                        {format(new Date(checkOutDate), 'EEE, MMM dd, yyyy')}
+                        {safeFormat(checkOutDate, 'EEE, MMM dd, yyyy')}
                       </span>
                     </div>
                   )}
@@ -511,6 +541,9 @@ export default function BookingDetailsPage() {
 
               {/* Action Buttons */}
               <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+                {booking.status?.toLowerCase() === 'completed' && !reviewSubmitted && (
+                  <button onClick={() => setReviewOpen(true)} className="flex-1 flex items-center justify-center gap-2 bg-amber-500 text-gray-950 py-3 px-4 rounded-lg font-semibold hover:bg-amber-400 transition-colors"><Star size={20} /><span>Review stay</span></button>
+                )}
                 <button
                   onClick={handleChatClick}
                   className="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white py-3 px-4 rounded-lg font-semibold hover:bg-blue-700 transition-colors"
@@ -554,6 +587,17 @@ export default function BookingDetailsPage() {
           </div>
         </main>
       </div>
+
+      {reviewOpen && (
+        <div className="fixed inset-0 z-[70] grid place-items-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl dark:bg-gray-900">
+            <div className="flex items-start justify-between gap-4"><div><p className="text-sm font-bold text-amber-600">YOUR EXPERIENCE</p><h2 className="mt-1 text-2xl font-bold text-gray-950 dark:text-white">How was your stay?</h2></div><button onClick={() => setReviewOpen(false)} className="grid h-9 w-9 place-items-center rounded-full bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300"><X size={18} /></button></div>
+            <div className="mt-6 rounded-2xl bg-gray-50 p-5 text-center dark:bg-gray-800"><p className="mb-3 text-sm font-semibold text-gray-600 dark:text-gray-300">Tap to rate</p><div className="flex justify-center"><RatingStars rating={reviewRating} size={32} interactive onChange={setReviewRating} /></div></div>
+            <label className="mt-5 block text-sm font-bold text-gray-800 dark:text-gray-100">Tell future guests more <span className="font-normal text-gray-400">(optional)</span></label><textarea value={reviewComment} onChange={(e) => setReviewComment(e.target.value)} rows={4} maxLength={1000} className="mt-2 w-full resize-none rounded-2xl border border-gray-300 bg-transparent p-4 text-gray-950 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-gray-700 dark:text-white" placeholder="Cleanliness, location, communication, value…" />
+            <button onClick={submitReview} disabled={reviewSubmitting || !reviewRating} className="mt-5 w-full rounded-xl bg-primary px-4 py-3.5 font-extrabold text-gray-950 disabled:opacity-50">{reviewSubmitting ? 'Submitting…' : 'Submit review'}</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
