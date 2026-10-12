@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
+import { getErrorMessage } from '@/lib/utils/errors';
 
 function PaymentSummaryContent() {
   const params = useParams();
@@ -139,7 +140,7 @@ function PaymentSummaryContent() {
       }
     } catch (error: any) {
       console.error('Error fetching apartment details:', error);
-      toast.error(error.response?.data?.message || 'Failed to load apartment details');
+      toast.error(getErrorMessage(error, 'Failed to load apartment details'));
     } finally {
       setLoading(false);
     }
@@ -310,16 +311,23 @@ function PaymentSummaryContent() {
 
   // Get bedroom configuration name
   const bedroomConfigName = useMemo(() => {
+    const br = apartment?.bedrooms ?? 0;
     if (!selectedBedrooms || !apartment) {
-      return `${apartment?.bedrooms || 0} Bedrooms (Full Apartment)`;
+      return br === 0 ? 'Studio (Full Apartment)' : `${br} Bedrooms (Full Apartment)`;
     }
-    
+
     if (selectedBedrooms === apartment.bedrooms) {
       return `${selectedBedrooms} Bedrooms (Full Apartment)`;
     }
-    
+
     return `${selectedBedrooms} Bedroom${selectedBedrooms > 1 ? 's' : ''}`;
   }, [selectedBedrooms, apartment]);
+
+  // Get bedroom pricing details
+  const bedroomPricingDetails = useMemo(() => {
+    if (!apartment?.bedroomPricing || !selectedBedrooms) return null;
+    return apartment.bedroomPricing.find(bp => bp.bedrooms === selectedBedrooms && bp.isActive) || null;
+  }, [apartment?.bedroomPricing, selectedBedrooms]);
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return 'N/A';
@@ -499,6 +507,16 @@ function PaymentSummaryContent() {
                 <span className="font-medium">Configuration:</span>
                 <span className="ml-2">{bedroomConfigName}</span>
               </div>
+              {bedroomPricingDetails && (
+                <div className="ml-6 text-sm text-gray-600 dark:text-gray-400">
+                  <p>Bedroom-specific pricing: ₦{numberWithCommas(bedroomPricingDetails.price)} / night</p>
+                  {apartment.bedrooms > 0 && selectedBedrooms !== null && selectedBedrooms < apartment.bedrooms && (
+                    <p className="text-xs italic mt-1">
+                      Partial apartment booking ({selectedBedrooms} of {apartment.bedrooms} bedrooms)
+                    </p>
+                  )}
+                </div>
+              )}
               <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
                 <Calendar size={16} className="mr-2" />
                 <span className="font-medium">Duration:</span>

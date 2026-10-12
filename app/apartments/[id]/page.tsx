@@ -16,9 +16,11 @@ import {
   MapPin, Bed, Bath, Users, ChevronLeft, ChevronRight, 
   CheckCircle, Copy, ArrowLeft, Calendar, Shield, Building2, Play
 } from 'lucide-react';
-import MediaModal from '@/components/MediaModal';
+import dynamic from 'next/dynamic';
+const MediaModal = dynamic(() => import('@/components/MediaModal'), { ssr: false });
 import toast from 'react-hot-toast';
 import ApartmentEnhancements from '@/components/ApartmentEnhancements';
+import { getErrorMessage } from '@/lib/utils/errors';
 
 export default function ApartmentDetailsPage() {
   const params = useParams();
@@ -416,7 +418,7 @@ export default function ApartmentDetailsPage() {
       }
     } catch (error: any) {
       console.error('Error cancelling reservation:', error);
-      toast.error(error.response?.data?.message || 'Failed to cancel reservation. Please try again.');
+      toast.error(getErrorMessage(error, 'Failed to cancel reservation. Please try again.'));
     } finally {
       setIsCancelling(false);
     }
@@ -577,7 +579,7 @@ export default function ApartmentDetailsPage() {
       }
     } catch (error: any) {
       console.error('Error fetching apartment details:', error);
-      toast.error(error.response?.data?.message || 'Failed to load apartment details');
+      toast.error(getErrorMessage(error, 'Failed to load apartment details'));
     } finally {
       setLoading(false);
     }
@@ -606,7 +608,7 @@ export default function ApartmentDetailsPage() {
     // Add full apartment option
     options.push({
       bedrooms: null,
-      label: `${apartment.bedrooms} Bedrooms (Full Apartment)`,
+      label: apartment.bedrooms === 0 ? 'Studio (Full Apartment)' : `${apartment.bedrooms} Bedrooms (Full Apartment)`,
       price: getPrice(apartment, reservationType as any, null)
     });
     
@@ -615,7 +617,7 @@ export default function ApartmentDetailsPage() {
       const configPrice = getPrice(apartment, reservationType as any, config.bedrooms);
       options.push({
         bedrooms: config.bedrooms,
-        label: `${config.bedrooms} ${config.bedrooms === 1 ? 'Bedroom' : 'Bedrooms'}`,
+        label: config.bedrooms === 0 ? 'Studio' : `${config.bedrooms} ${config.bedrooms === 1 ? 'Bedroom' : 'Bedrooms'}`,
         price: configPrice
       });
     });
@@ -825,6 +827,7 @@ export default function ApartmentDetailsPage() {
                       <video
                         ref={videoRef}
                         src={currentMedia.uri}
+                        preload="metadata"
                         className="w-full h-full object-cover pointer-events-none"
                         controls={isVideoPlaying}
                         autoPlay={isVideoPlaying}
@@ -850,6 +853,8 @@ export default function ApartmentDetailsPage() {
                       src={currentMedia.uri}
                       alt={apartment.apartmentName}
                       fill
+                      sizes="(max-width: 1024px) 100vw, 1100px"
+                      quality={75}
                       className="object-cover cursor-pointer"
                       priority
                     />
@@ -921,6 +926,7 @@ export default function ApartmentDetailsPage() {
                     <>
                       <video
                         src={mediaItem.uri}
+                        preload="metadata"
                         className="w-full h-full object-cover"
                         muted
                         playsInline
@@ -940,6 +946,8 @@ export default function ApartmentDetailsPage() {
                       src={mediaItem.uri}
                       alt={`Thumbnail ${index + 1}`}
                       fill
+                      sizes="96px"
+                      quality={60}
                       className="object-cover"
                     />
                   )}
@@ -1012,8 +1020,19 @@ export default function ApartmentDetailsPage() {
 
                   <div className="relative w-full">
                     <button
-                      onClick={() => setShowBedroomDropdown(!showBedroomDropdown)}
-                      className="w-full flex items-center justify-between p-4 border-2 border-gray-300 dark:border-gray-600 rounded-lg hover:border-primary dark:hover:border-primary transition-colors bg-white dark:bg-gray-800"
+                      onClick={() => {
+                        if (reservationStatus === 'accepted') {
+                          toast.error('Bedroom selection is locked. You cannot change the bedroom configuration for an accepted reservation.');
+                          return;
+                        }
+                        setShowBedroomDropdown(!showBedroomDropdown);
+                      }}
+                      disabled={reservationStatus === 'accepted'}
+                      className={`w-full flex items-center justify-between p-4 border-2 border-gray-300 dark:border-gray-600 rounded-lg transition-colors ${
+                        reservationStatus === 'accepted'
+                          ? 'opacity-60 cursor-not-allowed bg-gray-100 dark:bg-gray-700'
+                          : 'hover:border-primary dark:hover:border-primary bg-white dark:bg-gray-800'
+                      }`}
                     >
                       <div className="flex items-center flex-1 min-w-0">
                         <Bed size={20} className="mr-3 text-gray-600 dark:text-gray-400 flex-shrink-0" />
@@ -1021,7 +1040,7 @@ export default function ApartmentDetailsPage() {
                           <p className="font-semibold text-gray-900 dark:text-white truncate">
                             {selectedBedrooms !== null
                               ? getBedroomOptions.find(opt => opt.bedrooms === selectedBedrooms)?.label.replace(' (Full Apartment)', '') || 
-                                `${selectedBedrooms} ${selectedBedrooms === 1 ? 'Bedroom' : 'Bedrooms'}`
+                                (selectedBedrooms === 0 ? 'Studio' : `${selectedBedrooms} ${selectedBedrooms === 1 ? 'Bedroom' : 'Bedrooms'}`)
                               : 'Select bedroom configuration'}
                           </p>
                           {selectedBedrooms !== null && (
@@ -1037,7 +1056,20 @@ export default function ApartmentDetailsPage() {
                       />
                     </button>
 
-                    {showBedroomDropdown && getBedroomOptions.length > 0 && (
+                    {reservationStatus === 'accepted' && acceptedReservationBedrooms !== undefined && (
+                      <div className="mt-3 p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+                        <p className="text-sm font-semibold text-blue-900 dark:text-blue-200">
+                          Bedroom selection locked: {acceptedReservationBedrooms === null
+                            ? (apartment.bedrooms === 0 ? 'Studio (Full Apartment)' : `${apartment.bedrooms} Bedrooms (Full Apartment)`)
+                            : (acceptedReservationBedrooms === 0 ? 'Studio' : `${acceptedReservationBedrooms} ${acceptedReservationBedrooms === 1 ? 'Bedroom' : 'Bedrooms'}`)}
+                        </p>
+                        <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
+                          This matches your accepted reservation. You cannot change it.
+                        </p>
+                      </div>
+                    )}
+
+                    {showBedroomDropdown && getBedroomOptions.length > 0 && reservationStatus !== 'accepted' && (
                       <div className="absolute z-10 w-full mt-2 bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-700 rounded-lg shadow-lg dark:shadow-gray-900 max-h-80 overflow-y-auto left-0 right-0 max-w-full">
                         {getBedroomOptions.map((option, index) => {
                           const isSelected = selectedBedrooms === option.bedrooms;
@@ -1058,10 +1090,13 @@ export default function ApartmentDetailsPage() {
                                   <div className="min-w-0 flex-1">
                                     <p className="font-semibold text-gray-900 dark:text-white truncate">
                                       {option.label.replace(' (Full Apartment)', '')}
+                                      {option.bedrooms === null && (
+                                        <span className="ml-2 align-middle text-[9px] font-bold uppercase px-1.5 py-0.5 rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400">Full</span>
+                                      )}
                                     </p>
                                     <p className="text-sm text-gray-600 dark:text-gray-400 truncate">
                                       {option.bedrooms !== null 
-                                        ? `${option.bedrooms} ${option.bedrooms === 1 ? 'bedroom' : 'bedrooms'} available`
+                                        ? (option.bedrooms === 0 ? 'Studio' : `${option.bedrooms} ${option.bedrooms === 1 ? 'bedroom' : 'bedrooms'} available`)
                                         : 'Complete apartment access'}
                                     </p>
                                   </div>
@@ -1082,6 +1117,18 @@ export default function ApartmentDetailsPage() {
                       </div>
                     )}
                   </div>
+
+                  {selectedBedrooms !== null && !showBedroomDropdown && (
+                    <div className="mt-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-700 flex items-center justify-between gap-2">
+                      <div className="flex items-center min-w-0">
+                        <CheckCircle size={18} className="mr-2 text-gray-600 dark:text-gray-400 flex-shrink-0" />
+                        <span className="text-sm font-semibold text-gray-900 dark:text-white truncate">
+                          Selected: {getBedroomOptions.find(opt => opt.bedrooms === selectedBedrooms)?.label.replace(' (Full Apartment)', '') || (selectedBedrooms === 0 ? 'Studio' : `${selectedBedrooms} Bedroom${selectedBedrooms !== 1 ? 's' : ''}`)}
+                        </span>
+                      </div>
+                      <span className="font-bold text-gray-900 dark:text-white whitespace-nowrap">₦{numberWithCommas(price)}/night</span>
+                    </div>
+                  )}
                 </div>
               )}
 
