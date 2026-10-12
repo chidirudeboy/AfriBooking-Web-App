@@ -6,6 +6,9 @@ import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { Eye, EyeOff, Building2, ExternalLink } from 'lucide-react';
 import { isEmpty } from '@/lib/utils';
+import toast from 'react-hot-toast';
+import { getPasswordError } from '@/lib/utils/password';
+import PasswordRequirements from '@/components/PasswordRequirements';
 
 export default function SignUpPage() {
   const [firstName, setFirstName] = useState('');
@@ -26,27 +29,29 @@ export default function SignUpPage() {
   }, [user, router]);
 
   const validateForm = () => {
-    if (
-      isEmpty(firstName) ||
-      isEmpty(lastName) ||
-      isEmpty(email) ||
-      isEmpty(phoneNumber) ||
-      isEmpty(password) ||
-      isEmpty(passwordConf)
-    ) {
+    if (isEmpty(firstName) || isEmpty(lastName) || isEmpty(email) || isEmpty(phoneNumber)) {
+      toast.error('Please fill in your first name, last name, email and phone number.');
+      return false;
+    }
+
+    if (isEmpty(password)) {
+      toast.error('Please enter a password.');
+      return false;
+    }
+
+    const passwordError = getPasswordError(password);
+    if (passwordError) {
+      toast.error(passwordError);
       return false;
     }
 
     if (password !== passwordConf) {
+      toast.error('Passwords do not match. Please re-enter your confirmation password.');
       return false;
     }
 
     if (phoneNumber.length !== 11) {
-      return false;
-    }
-
-    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
-    if (!passwordRegex.test(password)) {
+      toast.error(`Phone number must be 11 digits (you entered ${phoneNumber.length}).`);
       return false;
     }
 
@@ -189,9 +194,7 @@ export default function SignUpPage() {
             />
           </div>
 
-          <div className="text-sm text-gray-600 dark:text-gray-400">
-            <p>Password should contain: uppercase, lowercase, number, special character (e.g., Aa1%)</p>
-          </div>
+          <PasswordRequirements password={password} confirmPassword={passwordConf} />
 
           <button
             type="submit"

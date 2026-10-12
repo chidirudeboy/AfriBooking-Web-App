@@ -11,6 +11,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [passwordVisible, setPasswordVisible] = useState(false);
+  const [capsLockOn, setCapsLockOn] = useState(false);
   const { loginUser, loading, user } = useAuth();
   const router = useRouter();
 
@@ -87,6 +88,9 @@ export default function LoginPage() {
               placeholder="Enter password*"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              onKeyUp={(e) => setCapsLockOn(e.getModifierState('CapsLock'))}
+              onKeyDown={(e) => setCapsLockOn(e.getModifierState('CapsLock'))}
+              onBlur={() => setCapsLockOn(false)}
               className="w-full px-3 py-4 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent pr-10 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400"
               required
               disabled={loading}
@@ -99,6 +103,12 @@ export default function LoginPage() {
               {passwordVisible ? <EyeOff size={20} /> : <Eye size={20} />}
             </button>
           </div>
+
+          {capsLockOn && (
+            <p className="text-sm text-amber-600 dark:text-amber-400" role="alert">
+              Caps Lock is on. Passwords are case-sensitive, so check your capital letters.
+            </p>
+          )}
 
           <div className="text-right">
             <Link href="/forgot-password" className="text-sm text-primary hover:underline">
