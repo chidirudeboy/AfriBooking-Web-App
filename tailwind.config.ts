@@ -10,8 +10,8 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['"DM Sans"', 'system-ui', '-apple-system', 'sans-serif'],
-        display: ['Manrope', 'system-ui', '-apple-system', 'sans-serif'],
+        sans: ['var(--font-dm-sans)', '"DM Sans"', 'system-ui', '-apple-system', 'sans-serif'],
+        display: ['var(--font-manrope)', 'Manrope', 'system-ui', '-apple-system', 'sans-serif'],
       },
       colors: {
         primary: {

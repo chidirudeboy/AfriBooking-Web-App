@@ -13,6 +13,9 @@ const nextConfig = {
   },
   images: {
     formats: ['image/avif', 'image/webp'],
+    // Keep optimized images cached for 30 days (default is 60s) so scrolling
+    // back to a listing reuses the browser/CDN cache instead of reloading.
+    minimumCacheTTL: 60 * 60 * 24 * 30,
     remotePatterns: [
       {
         protocol: 'http',
