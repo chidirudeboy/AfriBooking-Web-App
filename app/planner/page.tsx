@@ -57,6 +57,7 @@ import {
   getTripPlans,
   tripPlannerMessage,
   resetTripStayPreferences,
+  saveTripPlannerSetup,
   selectTripStay,
   setTripStayPreference,
   undoTripStayPreference,
@@ -83,6 +84,9 @@ type TripIntent = {
   activityCategory?: string;
   activitySubcategories?: string[];
   activityPreferences?: Record<string, string[]>;
+  specificArea?: string;
+  accommodationMode?: 'afribooking' | 'own';
+  accommodationAddress?: string;
   activityLocation?: {
     name: string;
     address?: string;
@@ -401,6 +405,14 @@ export default function TripPlannerPage() {
   const [savingPlanTitle, setSavingPlanTitle] = useState(false);
   const [checkInDraft, setCheckInDraft] = useState('');
   const [checkOutDraft, setCheckOutDraft] = useState('');
+  const [setupStep, setSetupStep] = useState<1 | 2 | 3>(1);
+  const [setupSaving, setSetupSaving] = useState(false);
+  const [destinationDraft, setDestinationDraft] = useState('');
+  const [areaDraft, setAreaDraft] = useState('');
+  const [staySetupMode, setStaySetupMode] = useState<'afribooking' | 'own'>('afribooking');
+  const [ownStayAddress, setOwnStayAddress] = useState('');
+  const [guestDraft, setGuestDraft] = useState(2);
+  const [budgetDraft, setBudgetDraft] = useState('');
   const [activityTransfer, setActivityTransfer] = useState<{
     sourceDay: number;
     activityIndex: number;
@@ -434,7 +446,10 @@ export default function TripPlannerPage() {
   useEffect(() => {
     if (result?.intent.startDate) setCheckInDraft(result.intent.startDate.slice(0, 10));
     if (result?.intent.endDate) setCheckOutDraft(result.intent.endDate.slice(0, 10));
-  }, [result?.intent.endDate, result?.intent.startDate]);
+    if (result?.intent.destination) setDestinationDraft(result.intent.destination);
+    if (result?.intent.guests) setGuestDraft(result.intent.guests);
+    if (result?.intent.budget) setBudgetDraft(String(result.intent.budget));
+  }, [result?.intent.budget, result?.intent.destination, result?.intent.endDate, result?.intent.guests, result?.intent.startDate]);
 
   useEffect(() => {
     if (!showStayComparison) return;
@@ -559,22 +574,11 @@ export default function TripPlannerPage() {
     setActivityPage(1);
   }, [selectedActivityCategory, selectedActivitySubcategories, result?.activities]);
 
-  const plannerSteps = useMemo(
-    () => [
-      { label: 'Destination', complete: Boolean(result?.intent.destination) },
-      {
-        label: 'Trip details',
-        complete: Boolean(
-          result?.intent.durationDays || result?.intent.startDate || result?.intent.budget
-        ),
-      },
-      { label: 'Interests', complete: Boolean(result?.intent.interests?.length) },
-      { label: 'Your plan', complete: Boolean(result?.itinerary?.days?.length) },
-    ],
-    [result]
-  );
-
-  const sendMessage = async (message: string, appendUser = true) => {
+  const sendMessage = async (
+    message: string,
+    appendUser = true,
+    requestContext?: { planId: string; intent: TripIntent }
+  ) => {
     const trimmed = message.trim();
     if (!trimmed || loading) return;
 
@@ -589,8 +593,8 @@ export default function TripPlannerPage() {
     try {
       const response = await api.post(tripPlannerMessage, {
           message: trimmed,
-          planId,
-          intent: result?.intent,
+          planId: requestContext?.planId || planId,
+          intent: requestContext?.intent || result?.intent,
       });
       const payload = response.data;
       if (!payload?.success) {
@@ -649,6 +653,102 @@ export default function TripPlannerPage() {
     void sendMessage(input);
   };
 
+  const saveStructuredSetup = async (intentPatch: Partial<TripIntent>) => {
+    setSetupSaving(true);
+    try {
+      const response = await api.post(saveTripPlannerSetup, { planId, intent: intentPatch });
+      const savedPlanId = String(response.data?.data?.planId || planId || '');
+      const savedIntent = {
+        interests: [],
+        missingFields: [],
+        ...(result?.intent || {}),
+        ...(response.data?.data?.intent || intentPatch),
+      } as TripIntent;
+      setPlanId(savedPlanId);
+      setResult((current) => current
+        ? { ...current, planId: savedPlanId, intent: savedIntent }
+        : normalizePlannerResult({ planId: savedPlanId, intent: savedIntent, apartments: [], activities: [] })
+      );
+      return { planId: savedPlanId, intent: savedIntent };
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Unable to save your trip details');
+      return null;
+    } finally {
+      setSetupSaving(false);
+    }
+  };
+
+  const continueFromDestination = async () => {
+    if (!destinationDraft.trim()) {
+      toast.error('Enter the city or state you are visiting');
+      return;
+    }
+    if (staySetupMode === 'own' && !ownStayAddress.trim()) {
+      toast.error('Enter the address where you will be staying');
+      return;
+    }
+    const saved = await saveStructuredSetup({
+      destination: destinationDraft.trim(),
+      specificArea: areaDraft.trim() || undefined,
+      accommodationMode: staySetupMode,
+      accommodationAddress: staySetupMode === 'own' ? ownStayAddress.trim() : undefined,
+    });
+    if (saved) setSetupStep(2);
+  };
+
+  const continueFromTripDetails = async () => {
+    if (!checkInDraft || !checkOutDraft) {
+      toast.error('Choose both check-in and check-out dates');
+      return;
+    }
+    const start = new Date(`${checkInDraft}T00:00:00`);
+    const end = new Date(`${checkOutDraft}T00:00:00`);
+    const durationDays = Math.ceil((end.getTime() - start.getTime()) / 86400000);
+    if (!Number.isFinite(durationDays) || durationDays < 1 || durationDays > 14) {
+      toast.error('Choose a trip between 1 and 14 days');
+      return;
+    }
+    const budget = Number(budgetDraft.replace(/[^0-9.]/g, ''));
+    const saved = await saveStructuredSetup({
+      startDate: checkInDraft,
+      endDate: checkOutDraft,
+      durationDays,
+      guests: Math.max(1, guestDraft),
+      budget: Number.isFinite(budget) && budget > 0 ? budget : undefined,
+    });
+    if (saved) setSetupStep(3);
+  };
+
+  const toggleSetupInterest = (category: string) => {
+    setActivityPreferences((current) => {
+      const next = { ...current };
+      if (Object.prototype.hasOwnProperty.call(next, category)) delete next[category];
+      else next[category] = [];
+      return next;
+    });
+  };
+
+  const createStructuredTrip = async () => {
+    if (Object.keys(activityPreferences).length === 0) {
+      toast.error('Select at least one type of experience');
+      return;
+    }
+    const selectedLabels = activityTaxonomy
+      .filter((category) => Object.prototype.hasOwnProperty.call(activityPreferences, category.id))
+      .map((category) => category.label);
+    const saved = await saveStructuredSetup({
+      activityPreferences,
+      interests: selectedLabels,
+      missingFields: [],
+    });
+    if (!saved) return;
+    await sendMessage(
+      `Plan my ${saved.intent.durationDays || ''}-day trip to ${saved.intent.destination}. I am interested in ${selectedLabels.join(', ')}. Use my saved dates, guests, budget and accommodation preference.`,
+      true,
+      saved
+    );
+  };
+
   const submitTravelDates = () => {
     if (!checkInDraft || !checkOutDraft) {
       toast.error('Choose both your check-in and check-out dates');
@@ -687,6 +787,15 @@ export default function TripPlannerPage() {
     setSelectedActivityCategory('all');
     setSelectedActivitySubcategories([]);
     setActivityPreferences({});
+    setSetupStep(1);
+    setDestinationDraft('');
+    setAreaDraft('');
+    setStaySetupMode('afribooking');
+    setOwnStayAddress('');
+    setGuestDraft(2);
+    setBudgetDraft('');
+    setCheckInDraft('');
+    setCheckOutDraft('');
     inputRef.current?.focus();
   };
 
@@ -721,6 +830,13 @@ export default function TripPlannerPage() {
           ? { [plan.intent.activityCategory]: plan.intent.activitySubcategories || [] }
           : {};
       setActivityPreferences(savedPreferences);
+      setDestinationDraft(plan.intent?.destination || '');
+      setAreaDraft(plan.intent?.specificArea || '');
+      setStaySetupMode(plan.intent?.accommodationMode === 'own' ? 'own' : 'afribooking');
+      setOwnStayAddress(plan.intent?.accommodationAddress || '');
+      setGuestDraft(plan.intent?.guests || 2);
+      setBudgetDraft(plan.intent?.budget ? String(plan.intent.budget) : '');
+      setSetupStep(plan.intent?.startDate && plan.intent?.endDate ? 3 : plan.intent?.destination ? 2 : 1);
       setActivityPage(1);
       toast.success('Trip restored');
     } catch (error: any) {
@@ -1317,27 +1433,6 @@ export default function TripPlannerPage() {
           </div>
         </header>
 
-        <section className="relative z-10 mx-3 -mt-4 rounded-2xl border border-[#e7e2d2] bg-white/95 px-4 py-4 shadow-[0_12px_35px_rgba(28,28,24,0.08)] backdrop-blur sm:mx-7 sm:px-6 dark:border-[#353c47] dark:bg-[#1c222c]/95">
-          <div className="grid grid-cols-4 gap-2 sm:gap-4">
-            {plannerSteps.map((step, index) => {
-              const active = !step.complete && plannerSteps.slice(0, index).every((item) => item.complete);
-              return (
-                <div key={step.label} className="relative min-w-0">
-                  {index < plannerSteps.length - 1 && (
-                    <div className={`absolute left-[calc(50%+18px)] right-[calc(-50%+18px)] top-4 h-0.5 ${step.complete ? 'bg-[#ffbf00]' : 'bg-[#e8e9ec] dark:bg-[#363d47]'}`} />
-                  )}
-                  <div className="relative flex flex-col items-center text-center">
-                    <span className={`grid h-8 w-8 place-items-center rounded-full border text-[11px] font-black transition ${step.complete ? 'border-[#ffbf00] bg-[#ffbf00] text-[#17191b]' : active ? 'border-[#d6a000] bg-[#fff8df] text-[#9b7300] ring-4 ring-[#ffbf00]/10 dark:bg-[#302916]' : 'border-[#dfe1e5] bg-white text-[#9ca1a8] dark:border-[#3a424e] dark:bg-[#141922]'}`}>
-                      {step.complete ? <Check size={14} strokeWidth={3} /> : index + 1}
-                    </span>
-                    <span className={`mt-2 truncate text-[9px] font-extrabold uppercase tracking-wide sm:text-[10px] ${step.complete || active ? 'text-[#393d42] dark:text-white' : 'text-[#a0a5ac]'}`}>{step.label}</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-
         <section className="mt-5 rounded-3xl border border-[#e8e9ec] bg-white p-4 sm:p-5 dark:border-[#353c47] dark:bg-[#1c222c]">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -1381,76 +1476,54 @@ export default function TripPlannerPage() {
           </div>
         </section>
 
-        <section className="mt-5 rounded-3xl border border-[#eadfbd] bg-[#fffaf0] p-4 sm:p-6 dark:border-[#403821] dark:bg-[#1c1e20]">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div className="max-w-xl">
-              <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[#9a7000] dark:text-[#ffbf00]">Quick choices</p>
-              <h2 className="mt-1 text-base font-black text-[#17191b] dark:text-white">Personalize without filling a long form</h2>
-              <p className="mt-1 text-[11px] leading-5 text-[#777e87]">Tap an answer or simply describe everything in your own words below.</p>
+        <section className="mx-auto mt-5 max-w-4xl overflow-hidden rounded-[28px] border border-[#e8e9ec] bg-white shadow-[0_18px_55px_rgba(20,24,30,0.08)] dark:border-[#353c47] dark:bg-[#101820]">
+          <div className="border-b border-[#eceef1] px-5 py-5 sm:px-8 dark:border-[#303945]">
+            <div className="grid grid-cols-3 gap-2">
+              {['Where & Stay', 'Budget & Guests', 'Interests'].map((label, index) => {
+                const number = index + 1;
+                const complete = setupStep > number;
+                const active = setupStep === number;
+                return <button key={label} type="button" onClick={() => { if (number <= setupStep) setSetupStep(number as 1 | 2 | 3); }} className="relative flex flex-col items-center text-center">
+                  {index < 2 && <span className={`absolute left-[calc(50%+18px)] right-[calc(-50%+18px)] top-4 h-0.5 ${complete ? 'bg-[#ffbf00]' : 'bg-[#3a424c]'}`} />}
+                  <span className={`relative grid h-8 w-8 place-items-center rounded-full border text-xs font-black ${complete || active ? 'border-[#ffbf00] bg-[#ffbf00] text-[#17191b]' : 'border-[#58616b] text-[#9ba3ad]'}`}>{complete ? <Check size={14} strokeWidth={3} /> : number}</span>
+                  <span className={`mt-2 text-[10px] font-extrabold sm:text-xs ${active || complete ? 'text-[#9b7300] dark:text-[#ffbf00]' : 'text-[#858c95]'}`}>{label}</span>
+                </button>;
+              })}
             </div>
-            <span className="rounded-full border border-[#e4cf8f] bg-white px-3 py-1.5 text-[10px] font-bold text-[#7a6420] dark:border-[#4a422d] dark:bg-[#141922] dark:text-[#e8d99d]">Every choice stays editable</span>
           </div>
-          <div className="mt-5 grid gap-3 lg:grid-cols-3">
-            <div className="rounded-2xl border border-[#eadfbd] bg-white p-4 shadow-sm dark:border-[#3d392e] dark:bg-[#141922]">
-              <div className="flex items-center gap-2 text-xs font-black text-[#25292d] dark:text-white">
-                <span className="grid h-8 w-8 place-items-center rounded-xl bg-[#fff3c2] text-[#a47600] dark:bg-[#302916] dark:text-[#ffbf00]"><CalendarDays size={15} /></span>
-                When are you going?
+
+          <div className="p-5 sm:p-8">
+            {setupStep === 1 && <div>
+              <h2 className="text-2xl font-black text-[#17191b] dark:text-white">Where are you going and where will you stay?</h2>
+              <p className="mt-2 text-sm text-[#777e87] dark:text-[#aeb5bf]">Tell us your destination and accommodation preference.</p>
+              <div className="mt-6 grid gap-4 sm:grid-cols-2">
+                <label className="sm:col-span-2"><span className="text-xs font-extrabold text-[#34383d] dark:text-white">Destination (State / City)</span><div className="relative mt-2"><MapPin size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#ffbf00]" /><input value={destinationDraft} onChange={(event) => setDestinationDraft(event.target.value)} placeholder="Lagos, Nigeria" className="h-12 w-full rounded-xl border border-[#dfe2e6] bg-[#fafafa] pl-11 pr-4 text-sm font-bold outline-none focus:border-[#ffbf00] dark:border-[#3a424e] dark:bg-[#18212a] dark:text-white" /></div></label>
+                <label className="sm:col-span-2"><span className="text-xs font-extrabold text-[#34383d] dark:text-white">Specific area <span className="font-medium text-[#8b929b]">(optional)</span></span><input value={areaDraft} onChange={(event) => setAreaDraft(event.target.value)} placeholder="e.g. Lekki, Victoria Island, Ikoyi" className="mt-2 h-12 w-full rounded-xl border border-[#dfe2e6] bg-[#fafafa] px-4 text-sm font-semibold outline-none focus:border-[#ffbf00] dark:border-[#3a424e] dark:bg-[#18212a] dark:text-white" /></label>
+                <button type="button" onClick={() => setStaySetupMode('afribooking')} className={`flex min-h-[112px] gap-4 rounded-2xl border p-4 text-left transition ${staySetupMode === 'afribooking' ? 'border-[#ffbf00] bg-[#fff8df] ring-1 ring-[#ffbf00] dark:bg-[#302916]' : 'border-[#dfe2e6] dark:border-[#3a424e]'}`}><span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[#ffbf00] text-[#17191b]"><BedDouble size={22} /></span><span><strong className="block text-sm text-[#25292d] dark:text-white">Find me an apartment on AfriBooking</strong><small className="mt-1 block leading-5 text-[#747b84]">We’ll show available stays and use the selected address to plan your trip.</small></span></button>
+                <button type="button" onClick={() => setStaySetupMode('own')} className={`flex min-h-[112px] gap-4 rounded-2xl border p-4 text-left transition ${staySetupMode === 'own' ? 'border-[#ffbf00] bg-[#fff8df] ring-1 ring-[#ffbf00] dark:bg-[#302916]' : 'border-[#dfe2e6] dark:border-[#3a424e]'}`}><span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[#222a33] text-white"><MapPin size={22} /></span><span><strong className="block text-sm text-[#25292d] dark:text-white">I already have a place to stay</strong><small className="mt-1 block leading-5 text-[#747b84]">Enter its address and we’ll plan around that location.</small></span></button>
+                {staySetupMode === 'own' && <label className="sm:col-span-2"><span className="text-xs font-extrabold text-[#34383d] dark:text-white">Accommodation address</span><input value={ownStayAddress} onChange={(event) => setOwnStayAddress(event.target.value)} placeholder="Enter the full address or nearby landmark" className="mt-2 h-12 w-full rounded-xl border border-[#dfe2e6] bg-[#fafafa] px-4 text-sm font-semibold outline-none focus:border-[#ffbf00] dark:border-[#3a424e] dark:bg-[#18212a] dark:text-white" /></label>}
               </div>
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                <label className="min-w-0">
-                  <span className="mb-1 block text-[10px] font-bold text-[#777e87]">Check-in</span>
-                  <input
-                    type="date"
-                    value={checkInDraft}
-                    onChange={(event) => {
-                      setCheckInDraft(event.target.value);
-                      if (checkOutDraft && event.target.value >= checkOutDraft) setCheckOutDraft('');
-                    }}
-                    className="h-10 w-full rounded-xl border border-[#e4e5e8] bg-[#fafafa] px-2 text-[11px] font-bold text-[#25292d] outline-none transition focus:border-[#e0a600] focus:ring-2 focus:ring-[#ffbf00]/20 dark:border-[#343b45] dark:bg-[#1c222c] dark:text-white"
-                  />
-                </label>
-                <label className="min-w-0">
-                  <span className="mb-1 block text-[10px] font-bold text-[#777e87]">Check-out</span>
-                  <input
-                    type="date"
-                    min={checkInDraft || undefined}
-                    value={checkOutDraft}
-                    onChange={(event) => setCheckOutDraft(event.target.value)}
-                    className="h-10 w-full rounded-xl border border-[#e4e5e8] bg-[#fafafa] px-2 text-[11px] font-bold text-[#25292d] outline-none transition focus:border-[#e0a600] focus:ring-2 focus:ring-[#ffbf00]/20 dark:border-[#343b45] dark:bg-[#1c222c] dark:text-white"
-                  />
-                </label>
+              <button type="button" disabled={setupSaving} onClick={() => void continueFromDestination()} className="mt-6 inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#ffbf00] text-sm font-black text-[#17191b] disabled:opacity-50">{setupSaving ? <Loader2 size={16} className="animate-spin" /> : <>Next <ArrowRight size={17} /></>}</button>
+            </div>}
+
+            {setupStep === 2 && <div>
+              <h2 className="text-2xl font-black text-[#17191b] dark:text-white">When are you travelling and who’s going?</h2>
+              <p className="mt-2 text-sm text-[#777e87] dark:text-[#aeb5bf]">Set your dates, number of guests and total trip budget.</p>
+              <div className="mt-6 grid gap-4 sm:grid-cols-2">
+                <label><span className="text-xs font-extrabold dark:text-white">Check-in date</span><input type="date" value={checkInDraft} onChange={(event) => setCheckInDraft(event.target.value)} className="mt-2 h-12 w-full rounded-xl border border-[#dfe2e6] bg-[#fafafa] px-4 text-sm font-bold dark:border-[#3a424e] dark:bg-[#18212a] dark:text-white" /></label>
+                <label><span className="text-xs font-extrabold dark:text-white">Check-out date</span><input type="date" min={checkInDraft || undefined} value={checkOutDraft} onChange={(event) => setCheckOutDraft(event.target.value)} className="mt-2 h-12 w-full rounded-xl border border-[#dfe2e6] bg-[#fafafa] px-4 text-sm font-bold dark:border-[#3a424e] dark:bg-[#18212a] dark:text-white" /></label>
+                <div><span className="text-xs font-extrabold dark:text-white">Number of guests</span><div className="mt-2 flex h-12 items-center justify-between rounded-xl border border-[#dfe2e6] bg-[#fafafa] px-3 dark:border-[#3a424e] dark:bg-[#18212a]"><button type="button" onClick={() => setGuestDraft((value) => Math.max(1, value - 1))} className="grid h-8 w-8 place-items-center rounded-lg border dark:border-[#46505c]">−</button><strong className="dark:text-white">{guestDraft}</strong><button type="button" onClick={() => setGuestDraft((value) => Math.min(20, value + 1))} className="grid h-8 w-8 place-items-center rounded-lg border dark:border-[#46505c]">+</button></div></div>
+                <label><span className="text-xs font-extrabold dark:text-white">Total trip budget (₦) <span className="font-medium text-[#8b929b]">optional</span></span><input inputMode="numeric" value={budgetDraft} onChange={(event) => setBudgetDraft(event.target.value)} placeholder="250,000" className="mt-2 h-12 w-full rounded-xl border border-[#dfe2e6] bg-[#fafafa] px-4 text-sm font-bold dark:border-[#3a424e] dark:bg-[#18212a] dark:text-white" /></label>
               </div>
-              <button
-                type="button"
-                disabled={loading || !checkInDraft || !checkOutDraft}
-                onClick={submitTravelDates}
-                className="mt-3 inline-flex h-9 w-full items-center justify-center gap-2 rounded-xl bg-[#ffbf00] px-3 text-[11px] font-black text-[#17191b] transition hover:bg-[#f2b500] disabled:cursor-not-allowed disabled:opacity-45"
-              >
-                {loading ? <Loader2 size={13} className="animate-spin" /> : <CalendarDays size={13} />}
-                Use these dates
-              </button>
-            </div>
-            {quickChoiceGroups.map(({ label, icon: Icon, choices }) => (
-              <div key={label} className="rounded-2xl border border-[#eadfbd] bg-white p-4 shadow-sm dark:border-[#3d392e] dark:bg-[#141922]">
-                <div className="flex items-center gap-2 text-xs font-black text-[#25292d] dark:text-white">
-                  <span className="grid h-8 w-8 place-items-center rounded-xl bg-[#fff3c2] text-[#a47600] dark:bg-[#302916] dark:text-[#ffbf00]"><Icon size={15} /></span>
-                  {label}
-                </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {choices.map((preference) => (
-                    <button
-                      key={preference}
-                      type="button"
-                      disabled={loading}
-                      onClick={() => void sendMessage(preference)}
-                      className="rounded-xl border border-[#e4e5e8] bg-[#fafafa] px-3 py-2 text-[11px] font-extrabold text-[#5d6269] transition hover:-translate-y-0.5 hover:border-[#e0a600] hover:bg-[#fff4c8] disabled:opacity-50 dark:border-[#343b45] dark:bg-[#1c222c] dark:text-[#d2d7df]"
-                    >
-                      {preference}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ))}
+              <div className="mt-6 flex gap-3"><button type="button" onClick={() => setSetupStep(1)} className="h-12 flex-1 rounded-xl border border-[#dfe2e6] text-sm font-black dark:border-[#46505c] dark:text-white">Back</button><button type="button" disabled={setupSaving} onClick={() => void continueFromTripDetails()} className="inline-flex h-12 flex-[2] items-center justify-center gap-2 rounded-xl bg-[#ffbf00] text-sm font-black text-[#17191b] disabled:opacity-50">{setupSaving ? <Loader2 size={16} className="animate-spin" /> : <>Next <ArrowRight size={17} /></>}</button></div>
+            </div>}
+
+            {setupStep === 3 && <div>
+              <h2 className="text-2xl font-black text-[#17191b] dark:text-white">What do you want to include?</h2>
+              <p className="mt-2 text-sm text-[#777e87] dark:text-[#aeb5bf]">Select every experience you’re interested in. You can refine them later.</p>
+              <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">{activityTaxonomy.map((category) => { const selected = Object.prototype.hasOwnProperty.call(activityPreferences, category.id); return <button key={category.id} type="button" onClick={() => toggleSetupInterest(category.id)} className={`relative min-h-[92px] rounded-2xl border p-3 text-center text-xs font-extrabold transition ${selected ? 'border-[#ffbf00] bg-[#fff4c8] text-[#5e4700] ring-1 ring-[#ffbf00] dark:bg-[#302916] dark:text-[#ffd85d]' : 'border-[#dfe2e6] text-[#626970] dark:border-[#3a424e] dark:text-[#c6ccd5]'}`}>{selected && <Check size={13} className="absolute right-2 top-2" />}<span className="mb-2 block text-2xl">{category.emoji}</span>{category.label}</button>; })}</div>
+              <div className="mt-6 flex gap-3"><button type="button" onClick={() => setSetupStep(2)} className="h-12 flex-1 rounded-xl border border-[#dfe2e6] text-sm font-black dark:border-[#46505c] dark:text-white">Back</button><button type="button" disabled={setupSaving || loading} onClick={() => void createStructuredTrip()} className="inline-flex h-12 flex-[2] items-center justify-center gap-2 rounded-xl bg-[#ffbf00] text-sm font-black text-[#17191b] disabled:opacity-50">{setupSaving || loading ? <Loader2 size={16} className="animate-spin" /> : <>Create my trip <Sparkles size={16} /></>}</button></div>
+            </div>}
           </div>
         </section>
 
