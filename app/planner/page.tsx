@@ -82,6 +82,7 @@ type TripIntent = {
   activityRadiusKm?: number;
   activityCategory?: string;
   activitySubcategories?: string[];
+  activityPreferences?: Record<string, string[]>;
   activityLocation?: {
     name: string;
     address?: string;
@@ -216,11 +217,6 @@ const starterPrompts = [
 
 const quickChoiceGroups = [
   {
-    label: 'How long?',
-    icon: CalendarDays,
-    choices: ['1 day', '2–3 days', '4–7 days'],
-  },
-  {
     label: 'What budget?',
     icon: Wallet,
     choices: ['Under ₦250,000', '₦500,000 total', 'Luxury — flexible'],
@@ -255,7 +251,6 @@ const activityTaxonomy: ActivityCategoryDefinition[] = [
 
 const answerSuggestions: Record<string, string[]> = {
   destination: ['Ikeja, Lagos', 'Jos, Plateau', 'Abuja'],
-  datesOrDuration: ['This weekend', '3 days', '5 days'],
   guests: ['Just me', '2 guests', 'A family of 4'],
   budget: ['Under ₦250,000', '₦500,000 total', 'Luxury — flexible budget'],
   interests: ['Food and culture', 'Nature and relaxation', 'Nightlife and shopping', 'Family activities'],
@@ -271,6 +266,12 @@ const initialMessage: ConversationMessage = {
 
 const normalizePlannerResult = (raw: any): PlannerResult => {
   const intent = raw?.intent && typeof raw.intent === 'object' ? raw.intent : {};
+  const legacyPreferences = typeof intent.activityCategory === 'string' && intent.activityCategory !== 'all'
+    ? { [intent.activityCategory]: Array.isArray(intent.activitySubcategories) ? intent.activitySubcategories : [] }
+    : {};
+  const activityPreferences = intent.activityPreferences && typeof intent.activityPreferences === 'object' && !Array.isArray(intent.activityPreferences)
+    ? Object.fromEntries(Object.entries(intent.activityPreferences).map(([key, values]) => [key, Array.isArray(values) ? values.map(String) : []]))
+    : legacyPreferences;
   const activities = Array.isArray(raw?.activities) ? raw.activities.map((activity: any) => ({
     ...activity,
     id: String(activity?.id || ''),
@@ -308,6 +309,7 @@ const normalizePlannerResult = (raw: any): PlannerResult => {
       interests: Array.isArray(intent.interests) ? intent.interests : [],
       activityCategory: typeof intent.activityCategory === 'string' ? intent.activityCategory : 'all',
       activitySubcategories: Array.isArray(intent.activitySubcategories) ? intent.activitySubcategories : [],
+      activityPreferences,
       missingFields: Array.isArray(intent.missingFields) ? intent.missingFields : [],
     },
     apartments: Array.isArray(raw?.apartments) ? raw.apartments.map((apartment: any) => ({
@@ -384,6 +386,7 @@ export default function TripPlannerPage() {
   const [staySkipped, setStaySkipped] = useState(false);
   const [selectedActivityCategory, setSelectedActivityCategory] = useState('all');
   const [selectedActivitySubcategories, setSelectedActivitySubcategories] = useState<string[]>([]);
+  const [activityPreferences, setActivityPreferences] = useState<Record<string, string[]>>({});
   const [activityPage, setActivityPage] = useState(1);
   const [failedActivityImages, setFailedActivityImages] = useState<Set<string>>(new Set());
   const [stayDecisionLoading, setStayDecisionLoading] = useState(false);
@@ -396,6 +399,8 @@ export default function TripPlannerPage() {
   const [editingPlanTitle, setEditingPlanTitle] = useState(false);
   const [planTitleDraft, setPlanTitleDraft] = useState('');
   const [savingPlanTitle, setSavingPlanTitle] = useState(false);
+  const [checkInDraft, setCheckInDraft] = useState('');
+  const [checkOutDraft, setCheckOutDraft] = useState('');
   const [activityTransfer, setActivityTransfer] = useState<{
     sourceDay: number;
     activityIndex: number;
@@ -425,6 +430,11 @@ export default function TripPlannerPage() {
     };
     void loadPlans();
   }, [router, user]);
+
+  useEffect(() => {
+    if (result?.intent.startDate) setCheckInDraft(result.intent.startDate.slice(0, 10));
+    if (result?.intent.endDate) setCheckOutDraft(result.intent.endDate.slice(0, 10));
+  }, [result?.intent.endDate, result?.intent.startDate]);
 
   useEffect(() => {
     if (!showStayComparison) return;
@@ -472,6 +482,7 @@ export default function TripPlannerPage() {
   const suggestions = useMemo(() => {
     if (!result) return starterPrompts;
     const firstMissing = result.intent.missingFields?.[0];
+    if (firstMissing === 'datesOrDuration') return [];
     return (firstMissing && answerSuggestions[firstMissing]) || [
       'Make it more affordable',
       'Show me a different stay',
@@ -589,6 +600,13 @@ export default function TripPlannerPage() {
       const plannerResult = normalizePlannerResult(payload.data);
       setPlanId(plannerResult.planId);
       setResult(plannerResult);
+      const extractedPreferences = plannerResult.intent.activityPreferences || {};
+      setActivityPreferences(extractedPreferences);
+      const extractedCategory = Object.keys(extractedPreferences)[0];
+      if (extractedCategory) {
+        setSelectedActivityCategory(extractedCategory);
+        setSelectedActivitySubcategories(extractedPreferences[extractedCategory] || []);
+      }
       setSelectedDay(plannerResult.itinerary?.days[0]?.day || 1);
       setMessages((current) => [
         ...current,
@@ -631,6 +649,25 @@ export default function TripPlannerPage() {
     void sendMessage(input);
   };
 
+  const submitTravelDates = () => {
+    if (!checkInDraft || !checkOutDraft) {
+      toast.error('Choose both your check-in and check-out dates');
+      return;
+    }
+    const checkIn = new Date(`${checkInDraft}T00:00:00`);
+    const checkOut = new Date(`${checkOutDraft}T00:00:00`);
+    if (!Number.isFinite(checkIn.getTime()) || !Number.isFinite(checkOut.getTime()) || checkOut <= checkIn) {
+      toast.error('Check-out must be after check-in');
+      return;
+    }
+    const durationDays = Math.ceil((checkOut.getTime() - checkIn.getTime()) / 86400000);
+    if (durationDays > 14) {
+      toast.error('The AI planner currently supports trips of up to 14 days');
+      return;
+    }
+    void sendMessage(`My check-in date is ${checkInDraft} and my check-out date is ${checkOutDraft}.`);
+  };
+
   const resetPlanner = () => {
     setMessages([initialMessage]);
     setInput('');
@@ -647,6 +684,9 @@ export default function TripPlannerPage() {
     setStaySkipped(false);
     setLocationQuery('');
     setLocationPredictions([]);
+    setSelectedActivityCategory('all');
+    setSelectedActivitySubcategories([]);
+    setActivityPreferences({});
     inputRef.current?.focus();
   };
 
@@ -675,6 +715,12 @@ export default function TripPlannerPage() {
       setSelectedDay(plan.itinerary?.days?.[0]?.day || 1);
       setSelectedActivityCategory(plan.intent?.activityCategory || 'all');
       setSelectedActivitySubcategories(Array.isArray(plan.intent?.activitySubcategories) ? plan.intent.activitySubcategories : []);
+      const savedPreferences = plan.intent?.activityPreferences && typeof plan.intent.activityPreferences === 'object'
+        ? plan.intent.activityPreferences
+        : plan.intent?.activityCategory && plan.intent.activityCategory !== 'all'
+          ? { [plan.intent.activityCategory]: plan.intent.activitySubcategories || [] }
+          : {};
+      setActivityPreferences(savedPreferences);
       setActivityPage(1);
       toast.success('Trip restored');
     } catch (error: any) {
@@ -805,17 +851,18 @@ export default function TripPlannerPage() {
     radiusKm: number,
     location?: TripIntent['activityLocation'],
     category?: string,
-    subcategories?: string[]
+    subcategories?: string[],
+    preferences?: Record<string, string[]>
   ) => {
     if (!planId || !result || rangeLoading) return;
-    if (!location && category === undefined && subcategories === undefined && result.intent.activityRadiusKm === radiusKm) {
+    if (!location && category === undefined && subcategories === undefined && preferences === undefined && result.intent.activityRadiusKm === radiusKm) {
       setPendingRadius(null);
       return;
     }
     setRangeLoading(true);
     setPendingRadius(radiusKm);
     try {
-      const response = await api.patch(updateTripActivityRadius(planId), { radiusKm, location, category, subcategories });
+      const response = await api.patch(updateTripActivityRadius(planId), { radiusKm, location, category, subcategories, preferences });
       const data = response.data?.data;
       setResult((current) => current ? {
         ...current,
@@ -824,6 +871,7 @@ export default function TripPlannerPage() {
       } : current);
       if (category !== undefined) setSelectedActivityCategory(category);
       if (subcategories !== undefined) setSelectedActivitySubcategories(subcategories);
+      if (preferences !== undefined) setActivityPreferences(preferences);
       setActivityPage(1);
       toast.success(`Showing activities within ${radiusKm} km`);
     } catch (error: any) {
@@ -840,15 +888,38 @@ export default function TripPlannerPage() {
 
   const chooseActivityCategory = async (category: string) => {
     if (!result || rangeLoading) return;
-    await refreshActivitySearch(result.intent.activityRadiusKm || 5, undefined, category, []);
+    if (category === 'all') {
+      setSelectedActivityCategory('all');
+      setSelectedActivitySubcategories([]);
+      await refreshActivitySearch(result.intent.activityRadiusKm || 5, undefined, 'all', [], {});
+      return;
+    }
+    setSelectedActivityCategory(category);
+    const selected = activityPreferences[category];
+    setSelectedActivitySubcategories(selected || []);
+    if (selected !== undefined) return;
+    const nextPreferences = { ...activityPreferences, [category]: [] };
+    await refreshActivitySearch(result.intent.activityRadiusKm || 5, undefined, category, [], nextPreferences);
   };
 
   const toggleActivitySubcategory = async (subcategory: string) => {
     if (!result || rangeLoading || selectedActivityCategory === 'all') return;
-    const next = selectedActivitySubcategories.includes(subcategory)
-      ? selectedActivitySubcategories.filter((item) => item !== subcategory)
-      : [...selectedActivitySubcategories, subcategory];
-    await refreshActivitySearch(result.intent.activityRadiusKm || 5, undefined, selectedActivityCategory, next);
+    const current = activityPreferences[selectedActivityCategory] || [];
+    const next = current.includes(subcategory)
+      ? current.filter((item) => item !== subcategory)
+      : [...current, subcategory];
+    const nextPreferences = { ...activityPreferences, [selectedActivityCategory]: next };
+    await refreshActivitySearch(result.intent.activityRadiusKm || 5, undefined, selectedActivityCategory, next, nextPreferences);
+  };
+
+  const removeActivityCategory = async () => {
+    if (!result || rangeLoading || selectedActivityCategory === 'all') return;
+    const nextPreferences = { ...activityPreferences };
+    delete nextPreferences[selectedActivityCategory];
+    const nextActive = Object.keys(nextPreferences)[0] || 'all';
+    setSelectedActivityCategory(nextActive);
+    setSelectedActivitySubcategories(nextActive === 'all' ? [] : nextPreferences[nextActive] || []);
+    await refreshActivitySearch(result.intent.activityRadiusKm || 5, undefined, nextActive, nextActive === 'all' ? [] : nextPreferences[nextActive], nextPreferences);
   };
 
   const searchActivityLocation = async () => {
@@ -1320,6 +1391,45 @@ export default function TripPlannerPage() {
             <span className="rounded-full border border-[#e4cf8f] bg-white px-3 py-1.5 text-[10px] font-bold text-[#7a6420] dark:border-[#4a422d] dark:bg-[#141922] dark:text-[#e8d99d]">Every choice stays editable</span>
           </div>
           <div className="mt-5 grid gap-3 lg:grid-cols-3">
+            <div className="rounded-2xl border border-[#eadfbd] bg-white p-4 shadow-sm dark:border-[#3d392e] dark:bg-[#141922]">
+              <div className="flex items-center gap-2 text-xs font-black text-[#25292d] dark:text-white">
+                <span className="grid h-8 w-8 place-items-center rounded-xl bg-[#fff3c2] text-[#a47600] dark:bg-[#302916] dark:text-[#ffbf00]"><CalendarDays size={15} /></span>
+                When are you going?
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <label className="min-w-0">
+                  <span className="mb-1 block text-[10px] font-bold text-[#777e87]">Check-in</span>
+                  <input
+                    type="date"
+                    value={checkInDraft}
+                    onChange={(event) => {
+                      setCheckInDraft(event.target.value);
+                      if (checkOutDraft && event.target.value >= checkOutDraft) setCheckOutDraft('');
+                    }}
+                    className="h-10 w-full rounded-xl border border-[#e4e5e8] bg-[#fafafa] px-2 text-[11px] font-bold text-[#25292d] outline-none transition focus:border-[#e0a600] focus:ring-2 focus:ring-[#ffbf00]/20 dark:border-[#343b45] dark:bg-[#1c222c] dark:text-white"
+                  />
+                </label>
+                <label className="min-w-0">
+                  <span className="mb-1 block text-[10px] font-bold text-[#777e87]">Check-out</span>
+                  <input
+                    type="date"
+                    min={checkInDraft || undefined}
+                    value={checkOutDraft}
+                    onChange={(event) => setCheckOutDraft(event.target.value)}
+                    className="h-10 w-full rounded-xl border border-[#e4e5e8] bg-[#fafafa] px-2 text-[11px] font-bold text-[#25292d] outline-none transition focus:border-[#e0a600] focus:ring-2 focus:ring-[#ffbf00]/20 dark:border-[#343b45] dark:bg-[#1c222c] dark:text-white"
+                  />
+                </label>
+              </div>
+              <button
+                type="button"
+                disabled={loading || !checkInDraft || !checkOutDraft}
+                onClick={submitTravelDates}
+                className="mt-3 inline-flex h-9 w-full items-center justify-center gap-2 rounded-xl bg-[#ffbf00] px-3 text-[11px] font-black text-[#17191b] transition hover:bg-[#f2b500] disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                {loading ? <Loader2 size={13} className="animate-spin" /> : <CalendarDays size={13} />}
+                Use these dates
+              </button>
+            </div>
             {quickChoiceGroups.map(({ label, icon: Icon, choices }) => (
               <div key={label} className="rounded-2xl border border-[#eadfbd] bg-white p-4 shadow-sm dark:border-[#3d392e] dark:bg-[#141922]">
                 <div className="flex items-center gap-2 text-xs font-black text-[#25292d] dark:text-white">
@@ -1698,8 +1808,8 @@ export default function TripPlannerPage() {
             <div>
               <div>
                 <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[#8b6700] dark:text-[#ffbf00]">Verified nearby recommendations</p>
-                <h2 className="mt-1 font-display text-2xl font-black text-[#17191b] dark:text-white">{staySkipped && !result.intent.activityLocation ? (placeSearchMode === 'place' ? 'Add places you already know' : 'Where would you like to explore?') : 'Choose what belongs in your trip'}</h2>
-                <p className="mt-2 text-sm text-[#737981] dark:text-[#b3bac4]">{staySkipped && !result.intent.activityLocation ? (placeSearchMode === 'place' ? 'Search by name and add restaurants, attractions or landmarks directly to your plan.' : 'Search and select an area to get activity recommendations without booking a stay.') : 'Add or remove activities—the itinerary remains yours to shape.'}</p>
+                <h2 className="mt-1 font-display text-2xl font-black text-[#17191b] dark:text-white">{staySkipped && !result.intent.activityLocation ? (placeSearchMode === 'place' ? 'Add places you already know' : 'Where would you like to explore?') : 'What would you like to do?'}</h2>
+                <p className="mt-2 text-sm text-[#737981] dark:text-[#b3bac4]">{staySkipped && !result.intent.activityLocation ? (placeSearchMode === 'place' ? 'Search by name and add restaurants, attractions or landmarks directly to your plan.' : 'Search and select an area to get activity recommendations without booking a stay.') : 'Choose a category, then refine it so recommendations match the experience you want.'}</p>
                 <span className="mt-3 inline-flex rounded-full bg-[#eef7f0] px-2.5 py-1 text-[10px] font-extrabold text-[#347047] dark:bg-[#173322] dark:text-[#87d69d]">Booking a stay is optional</span>
                 <p className="mt-2 text-[10px] font-medium text-[#969ba2]">Place details provided by <span translate="no" className="whitespace-nowrap font-bold text-[#666b72] dark:text-[#c4cad2]">Google Maps</span></p>
               </div>
@@ -1707,18 +1817,22 @@ export default function TripPlannerPage() {
 
             <div className="mt-5 rounded-2xl border border-[#e7e9ec] bg-[#fafafa] p-3 sm:p-4 dark:border-[#343b46] dark:bg-[#151a22]">
               <div className="flex gap-2 overflow-x-auto pb-2 [scrollbar-width:none]">
-                <button type="button" disabled={rangeLoading} onClick={() => void chooseActivityCategory('all')} className={`flex min-w-[92px] shrink-0 flex-col items-center justify-center rounded-2xl border px-3 py-3 text-xs font-extrabold transition disabled:opacity-60 ${selectedActivityCategory === 'all' ? 'border-[#ffbf00] bg-[#ffbf00] text-[#17191b] shadow-[0_8px_24px_rgba(255,191,0,0.22)]' : 'border-[#e1e4e8] bg-white text-[#626970] dark:border-[#3a424e] dark:bg-[#1c222c] dark:text-[#c6ccd5]'}`}><span className="mb-1 text-xl">✨</span>All</button>
+                <button type="button" disabled={rangeLoading} onClick={() => void chooseActivityCategory('all')} className={`flex min-w-[104px] shrink-0 flex-col items-center justify-center rounded-2xl border px-3 py-3 text-xs font-extrabold transition disabled:opacity-60 ${Object.keys(activityPreferences).length === 0 ? 'border-[#ffbf00] bg-[#ffbf00] text-[#17191b] shadow-[0_8px_24px_rgba(255,191,0,0.22)]' : 'border-[#e1e4e8] bg-white text-[#626970] dark:border-[#3a424e] dark:bg-[#1c222c] dark:text-[#c6ccd5]'}`}><span className="mb-1 text-xl">✨</span>Explore all</button>
                 {activityTaxonomy.map((category) => (
-                  <button key={category.id} type="button" disabled={rangeLoading} onClick={() => void chooseActivityCategory(category.id)} className={`flex min-w-[116px] shrink-0 flex-col items-center justify-center rounded-2xl border px-3 py-3 text-center text-xs font-extrabold transition disabled:opacity-60 ${selectedActivityCategory === category.id ? 'border-[#ffbf00] bg-[#ffbf00] text-[#17191b] shadow-[0_8px_24px_rgba(255,191,0,0.22)]' : 'border-[#e1e4e8] bg-white text-[#626970] hover:border-[#d3aa2c] dark:border-[#3a424e] dark:bg-[#1c222c] dark:text-[#c6ccd5]'}`}>
+                  <button key={category.id} type="button" disabled={rangeLoading} onClick={() => void chooseActivityCategory(category.id)} className={`relative flex min-w-[116px] shrink-0 flex-col items-center justify-center rounded-2xl border px-3 py-3 text-center text-xs font-extrabold transition disabled:opacity-60 ${Object.prototype.hasOwnProperty.call(activityPreferences, category.id) ? 'border-[#ffbf00] bg-[#fff4c8] text-[#5e4700] shadow-[0_8px_24px_rgba(255,191,0,0.14)] dark:bg-[#332b14] dark:text-[#ffd85d]' : 'border-[#e1e4e8] bg-white text-[#626970] hover:border-[#d3aa2c] dark:border-[#3a424e] dark:bg-[#1c222c] dark:text-[#c6ccd5]'} ${selectedActivityCategory === category.id ? 'ring-2 ring-[#ffbf00]/40' : ''}`}>
+                    {Object.prototype.hasOwnProperty.call(activityPreferences, category.id) && <span className="absolute right-2 top-2 grid h-4 w-4 place-items-center rounded-full bg-[#ffbf00] text-[#17191b]"><Check size={10} strokeWidth={3} /></span>}
                     <span className="mb-1 text-xl">{category.emoji}</span>{category.label}
                   </button>
                 ))}
               </div>
               {activeActivityCategory && (
                 <div className="mt-3 border-t border-[#e3e5e8] pt-3 dark:border-[#343b46]">
-                  <div className="mb-2 flex items-center justify-between gap-3"><p className="text-xs font-black text-[#25292d] dark:text-white">Refine {activeActivityCategory.label}</p><span className="text-[10px] font-semibold text-[#8a9098]">Select one or more</span></div>
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <div><p className="text-xs font-black text-[#25292d] dark:text-white">Refine {activeActivityCategory.label}</p><span className="text-[10px] font-semibold text-[#8a9098]">Select one or more; your other categories stay selected</span></div>
+                    <button type="button" disabled={rangeLoading} onClick={() => void removeActivityCategory()} className="shrink-0 rounded-lg px-2.5 py-1.5 text-[10px] font-extrabold text-[#a13d3d] transition hover:bg-[#fff0f0] disabled:opacity-50 dark:hover:bg-[#382124]">Remove</button>
+                  </div>
                   <div className="flex flex-wrap gap-2">
-                    <button type="button" disabled={rangeLoading} onClick={() => void refreshActivitySearch(result.intent.activityRadiusKm || 5, undefined, selectedActivityCategory, [])} className={`rounded-full border px-3 py-2 text-[11px] font-extrabold transition disabled:opacity-60 ${selectedActivitySubcategories.length === 0 ? 'border-[#ffbf00] bg-[#fff2bd] text-[#654b00] dark:bg-[#332b14] dark:text-[#ffd85d]' : 'border-[#dfe2e6] bg-white text-[#697078] dark:border-[#3a424e] dark:bg-[#1c222c] dark:text-[#c6ccd5]'}`}>All {activeActivityCategory.label}</button>
+                    <button type="button" disabled={rangeLoading} onClick={() => void refreshActivitySearch(result.intent.activityRadiusKm || 5, undefined, selectedActivityCategory, [], { ...activityPreferences, [selectedActivityCategory]: [] })} className={`rounded-full border px-3 py-2 text-[11px] font-extrabold transition disabled:opacity-60 ${selectedActivitySubcategories.length === 0 ? 'border-[#ffbf00] bg-[#fff2bd] text-[#654b00] dark:bg-[#332b14] dark:text-[#ffd85d]' : 'border-[#dfe2e6] bg-white text-[#697078] dark:border-[#3a424e] dark:bg-[#1c222c] dark:text-[#c6ccd5]'}`}>All {activeActivityCategory.label}</button>
                     {activeActivityCategory.subcategories.map((subcategory) => {
                       const selected = selectedActivitySubcategories.includes(subcategory.id);
                       return <button key={subcategory.id} type="button" disabled={rangeLoading} onClick={() => void toggleActivitySubcategory(subcategory.id)} className={`rounded-full border px-3 py-2 text-[11px] font-extrabold transition disabled:opacity-60 ${selected ? 'border-[#ffbf00] bg-[#ffbf00] text-[#17191b]' : 'border-[#dfe2e6] bg-white text-[#697078] hover:border-[#d3aa2c] dark:border-[#3a424e] dark:bg-[#1c222c] dark:text-[#c6ccd5]'}`}>{selected && <Check size={11} className="mr-1 inline" />}{subcategory.label}</button>;
