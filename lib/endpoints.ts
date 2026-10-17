@@ -107,6 +107,8 @@ export const getPlacePhoto = (placeId: string) => endpoint2(`places/photo/${enco
 export const tripPlannerMessage = endpoint2("trip-planner/message");
 export const getTripPlans = endpoint2("trip-planner/plans");
 export const getTripPlan = (planId: string) => endpoint2(`trip-planner/plans/${planId}`);
+export const getTripApartmentPage = (planId: string, page: number, pageSize = 12) =>
+  endpoint2(`trip-planner/plans/${planId}/stays?page=${page}&pageSize=${pageSize}`);
 export const updateTripPlan = (planId: string) => endpoint2(`trip-planner/plans/${planId}`);
 export const deleteTripPlan = (planId: string) => endpoint2(`trip-planner/plans/${planId}`);
 export const setTripStayPreference = (planId: string) => endpoint2(`trip-planner/plans/${planId}/stay-preferences`);

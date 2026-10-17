@@ -54,6 +54,7 @@ import {
   getPlaceDetails,
   getPlacePhoto,
   getTripPlan,
+  getTripApartmentPage,
   getTripPlans,
   tripPlannerMessage,
   resetTripStayPreferences,
@@ -111,6 +112,17 @@ type ApartmentCandidate = {
   guests: number;
   amenities: string[];
   image?: string;
+  distanceKm?: number;
+  recommendationScore?: number;
+  recommendationReasons?: string[];
+};
+
+type ApartmentSearchPage = {
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+  hasMore: boolean;
 };
 
 type ItineraryActivity = {
@@ -172,6 +184,7 @@ type PlannerResult = {
   planStatus: 'draft' | 'saved';
   intent: TripIntent;
   apartments: ApartmentCandidate[];
+  apartmentSearch?: ApartmentSearchPage;
   activities: ActivityCandidate[];
   itinerary?: {
     title: string;
@@ -394,6 +407,7 @@ export default function TripPlannerPage() {
   const [activityPage, setActivityPage] = useState(1);
   const [failedActivityImages, setFailedActivityImages] = useState<Set<string>>(new Set());
   const [stayDecisionLoading, setStayDecisionLoading] = useState(false);
+  const [stayPageLoading, setStayPageLoading] = useState(false);
   const [stayCardMotion, setStayCardMotion] = useState<'left' | 'right' | null>(null);
   const [lastRejectedApartmentId, setLastRejectedApartmentId] = useState<string | null>(null);
   const [showInterestedStays, setShowInterestedStays] = useState(false);
@@ -935,6 +949,35 @@ export default function TripPlannerPage() {
       toast.error(error.response?.data?.message || 'Unable to reset your choices');
     } finally {
       setStayDecisionLoading(false);
+    }
+  };
+
+  const loadMoreStays = async () => {
+    if (!planId || !result?.apartmentSearch?.hasMore || stayPageLoading) return;
+    setStayPageLoading(true);
+    try {
+      const nextPage = result.apartmentSearch.page + 1;
+      const response = await api.get(
+        getTripApartmentPage(planId, nextPage, result.apartmentSearch.pageSize)
+      );
+      const data = response.data?.data;
+      const incoming = Array.isArray(data?.apartments) ? data.apartments : [];
+      setResult((current) => {
+        if (!current) return current;
+        const byId = new Map(current.apartments.map((apartment) => [apartment.id, apartment]));
+        incoming.forEach((apartment: ApartmentCandidate) => byId.set(apartment.id, apartment));
+        return {
+          ...current,
+          apartments: Array.from(byId.values()),
+          apartmentSearch: data?.apartmentSearch || current.apartmentSearch,
+          stayPreferences: data?.stayPreferences || current.stayPreferences,
+        };
+      });
+      toast.success(`${incoming.length} more matching stays loaded`);
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Unable to load more stays');
+    } finally {
+      setStayPageLoading(false);
     }
   };
 
@@ -1682,8 +1725,8 @@ export default function TripPlannerPage() {
                   <div>
                     <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[#8b6700] dark:text-[#ffbf00]">AfriBooking inventory first</p>
                     <h2 className="mt-1 text-lg font-black text-[#17191b] dark:text-white">
-                      {result.apartments.length
-                        ? `${result.apartments.length} matching stay${result.apartments.length === 1 ? '' : 's'}`
+                      {(result.apartmentSearch?.total || result.apartments.length)
+                        ? `${result.apartmentSearch?.total || result.apartments.length} matching stay${(result.apartmentSearch?.total || result.apartments.length) === 1 ? '' : 's'}`
                         : 'No matching stay yet'}
                     </h2>
                   </div>
@@ -1708,8 +1751,8 @@ export default function TripPlannerPage() {
                     className={`mt-4 overflow-hidden rounded-2xl border border-[#e8e9ec] bg-white shadow-[0_14px_40px_rgba(28,31,35,0.08)] transition duration-300 ease-out dark:border-[#353c47] dark:bg-[#181d25] ${stayCardMotion === 'left' ? '-translate-x-8 -rotate-2 opacity-20' : stayCardMotion === 'right' ? 'translate-x-8 rotate-2 opacity-20' : 'translate-x-0 rotate-0 opacity-100'}`}
                   >
                     <div className="flex items-center justify-between bg-[#fafafa] px-4 py-2.5 text-[10px] font-extrabold text-[#7b8189] dark:bg-[#141922] dark:text-[#aeb5bf]">
-                      <span>{reviewedStayCount + 1} of {result.apartments.length}</span>
-                      <span>{result.apartments.length - reviewedStayCount} left to review</span>
+                      <span>{reviewedStayCount + 1} of {result.apartmentSearch?.total || result.apartments.length}</span>
+                      <span>{Math.max(0, result.apartments.length - reviewedStayCount)} loaded left to review</span>
                     </div>
                     {selectedApartment.image ? (
                       <div className="relative h-44 w-full bg-[#eef0f2]">
@@ -1738,6 +1781,22 @@ export default function TripPlannerPage() {
                           <p className="mt-1 flex items-center gap-1 truncate text-xs text-[#777e87] dark:text-[#aeb5bf]">
                             <MapPin size={12} /> {selectedApartment.neighborhood || selectedApartment.city}, {selectedApartment.state}
                           </p>
+                          {typeof selectedApartment.distanceKm === 'number' && (
+                            <p className="mt-1 text-[10px] font-semibold text-[#8a9098] dark:text-[#929aa5]">
+                              {selectedApartment.distanceKm < 1
+                                ? `${Math.max(1, Math.round(selectedApartment.distanceKm * 1000))} m from your searched area`
+                                : `${selectedApartment.distanceKm.toFixed(1)} km from your searched area`}
+                            </p>
+                          )}
+                          {selectedApartment.recommendationReasons?.length ? (
+                            <div className="mt-2 flex flex-wrap gap-1.5">
+                              {selectedApartment.recommendationReasons.map((reason) => (
+                                <span key={reason} className="rounded-full bg-[#fff5ce] px-2 py-1 text-[9px] font-bold text-[#765800] dark:bg-[#312a17] dark:text-[#ffcf3d]">
+                                  {reason}
+                                </span>
+                              ))}
+                            </div>
+                          ) : null}
                         </div>
                         <p className="shrink-0 text-right text-xs font-black text-[#17191b] dark:text-white">
                           {formatNaira(selectedApartment.pricePerNight)}
@@ -1783,6 +1842,18 @@ export default function TripPlannerPage() {
                         View recommended stay <ArrowRight size={14} />
                       </Link>
                     </div>
+                  </div>
+                ) : result.apartmentSearch?.hasMore ? (
+                  <div className="mt-4 rounded-2xl border border-[#e6dfca] bg-[linear-gradient(145deg,#fffdf6,#fff5d7)] p-5 text-center dark:border-[#403821] dark:bg-[linear-gradient(145deg,#202630,#2c2617)]">
+                    <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-[#ffbf00] text-[#17191b]"><BedDouble size={22} /></div>
+                    <h3 className="mt-3 text-base font-black text-[#17191b] dark:text-white">More matching stays are ready</h3>
+                    <p className="mt-2 text-xs leading-5 text-[#737981] dark:text-[#b8bec7]">
+                      You reviewed the {result.apartments.length} stays currently loaded. Continue without losing your shortlist or skipped choices.
+                    </p>
+                    <button type="button" onClick={() => void loadMoreStays()} disabled={stayPageLoading} className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-[#17191b] px-4 py-2.5 text-xs font-extrabold text-white transition hover:bg-[#303438] disabled:opacity-50 dark:bg-[#ffbf00] dark:text-[#17191b]">
+                      {stayPageLoading ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
+                      Load more stays
+                    </button>
                   </div>
                 ) : result.apartments.length > 0 ? (
                   <div className="mt-4 rounded-2xl border border-[#e6dfca] bg-[linear-gradient(145deg,#fffdf6,#fff5d7)] p-5 text-center dark:border-[#403821] dark:bg-[linear-gradient(145deg,#202630,#2c2617)]">
